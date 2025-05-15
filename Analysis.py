@@ -363,10 +363,10 @@ async def analyze_row_async(row, idx, df, weights, component_counts, configurati
             return None
 
         resolution_text = f"{desc}\n{short_desc}\n{close_notes}".strip()
-        if len(resolution_text) > 3000:
+        if len(resolution_text) > 10000:
             print(f"🟡 [Row#{idx+1}] resolution_text > 3000，使用 short_desc + close_notes")
             resolution_text = f"{short_desc}\n{close_notes}".strip()
-            if len(resolution_text) > 3000:
+            if len(resolution_text) > 10000:
                 print(f"🔴 [Row#{idx+1}] short_desc + close_notes > 3000，只用 close_notes")
                 resolution_text = close_notes.strip()
         else:
@@ -410,10 +410,10 @@ async def analyze_row_async(row, idx, df, weights, component_counts, configurati
 
         # ==== 判斷 summary 輸入長度 ====
         summary_input = f"{short_desc}\n{desc}".strip()
-        if len(summary_input) > 2000:
+        if len(summary_input) > 8000:
             print(f"🟡 [Row#{idx+1}] summary_input > 2000，使用 short_desc + close_notes")
             summary_input = f"{short_desc}\n{close_notes}".strip()
-            if len(summary_input) > 2000:
+            if len(summary_input) > 8000:
                 print(f"🔴 [Row#{idx+1}] short_desc + close_notes > 2000，只用 short_desc")
                 summary_input = short_desc.strip()
         else:
