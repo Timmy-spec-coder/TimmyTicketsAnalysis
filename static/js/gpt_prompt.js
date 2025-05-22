@@ -107,14 +107,13 @@ async function loadPrompt() {
       saveBtn.innerHTML = "新增";
     }
   };
-
-
 function renderCurrentSetting(data, mapping) {
   let html = '';
   let blockHtml = '';
+
   if (mapping && mapping.solution && mapping.solution.prompt) {
     blockHtml += `
-      <div class="dashboard-block">
+      <div class="dashboard-block dashboard-block-solution">
         <div class="dash-icon bg-blue"><i class="fas fa-cogs"></i></div>
         <div class="dash-info">
           <div class="dash-title">Solution</div>
@@ -128,9 +127,10 @@ function renderCurrentSetting(data, mapping) {
       </div>
     `;
   }
+
   if (mapping && mapping.ai_summary && mapping.ai_summary.prompt) {
     blockHtml += `
-      <div class="dashboard-block">
+      <div class="dashboard-block dashboard-block-summary">
         <div class="dash-icon bg-yellow"><i class="fas fa-lightbulb"></i></div>
         <div class="dash-info">
           <div class="dash-title">AI Summary</div>
@@ -144,15 +144,19 @@ function renderCurrentSetting(data, mapping) {
       </div>
     `;
   }
+
   if (!blockHtml) {
     html = `<div class="text-warning">目前尚未設定任何用途。</div>`;
   } else {
-    html = `<div class="dashboard-flex-row">${blockHtml}</div>`;
+    html = `
+      <div class="dashboard-flex-row" style="display:flex; gap:32px; align-items:stretch;">
+        ${blockHtml}
+      </div>
+    `;
   }
+
   document.getElementById("currentSetting").innerHTML = html;
 }
-
-
 
 
 
