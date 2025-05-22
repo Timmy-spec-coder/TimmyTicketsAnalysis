@@ -705,6 +705,10 @@ function navigateTo1(page) {
         window.location.href = '/history'; // 導向歷史記錄頁面
     } else if (page === 'cluster') {
         window.location.href = '/generate_cluster';  // ✅ 對應後端路由名稱
+    } else if (page === 'manual') {
+        window.location.href = '/manual_input'; // 導向手冊頁面
+    } else if (page === 'gpt_prompt') {
+        window.location.href = '/gpt_prompt'; // 導向 GPT Prompt 管理頁面
     }
 }
 

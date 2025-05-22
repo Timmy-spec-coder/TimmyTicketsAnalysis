@@ -26,7 +26,7 @@ import traceback
 # 匯入 Werkzeug 的工具函數確保檔案名稱安全
 from werkzeug.utils import secure_filename
 # ✅ 匯入語意分析模組
-from SmartScoring import is_high_risk, is_escalated, is_multi_user, extract_keywords, recommend_solution
+from SmartScoring import is_high_risk, is_escalated, is_multi_user, extract_keywords, recommend_solution, is_actionable_resolution, load_embeddings, load_examples_from_json
 # ✅ 預先 encode 一筆資料以加速首次請求
 from SmartScoring import bert_model  # 確保你有從 SmartScoring 載入模型
 from SmartScoring import extract_cluster_name  # 匯入自定的 cluster 命名函式
@@ -278,6 +278,11 @@ async def analyze_excel_async(filepath, weights=None):
         'time_cluster': 2.0
     }
     weights = {**default_weights, **(weights or {})}
+    print(f"🟩 本次分析開始，將即時讀取三類語句 json 檔案...")
+    # ⭐ 讀取語句和 embedding
+    high_risk_examples, high_risk_embeddings = load_embeddings("high_risk")
+    escalation_examples, escalation_embeddings = load_embeddings("escalate")
+    multi_user_examples, multi_user_embeddings = load_embeddings("multi_user")
 
     df = pd.read_excel(filepath)
     component_counts = df['Role/Component'].value_counts()
@@ -288,7 +293,11 @@ async def analyze_excel_async(filepath, weights=None):
 
     # 非同步處理
     tasks = [
-        analyze_row_async(row, idx, df, weights, component_counts, configuration_item_counts, configuration_item_max, analysis_time)
+        analyze_row_async(
+            row, idx, df, weights, component_counts, configuration_item_counts, configuration_item_max, analysis_time,
+            high_risk_examples, high_risk_embeddings,
+            escalation_examples, escalation_embeddings,
+            multi_user_examples, multi_user_embeddings)
         for idx, row in df.iterrows()
     ]
     results_raw = await asyncio.gather(*tasks, return_exceptions=True)
@@ -345,7 +354,13 @@ async def analyze_excel_async(filepath, weights=None):
 
 
 
-async def analyze_row_async(row, idx, df, weights, component_counts, configuration_item_counts, configuration_item_max, analysis_time):
+async def analyze_row_async(row, idx, df, weights, component_counts, configuration_item_counts, configuration_item_max, analysis_time,     
+    high_risk_examples, high_risk_embeddings,
+    escalation_examples, escalation_embeddings,
+    multi_user_examples, multi_user_embeddings):
+    print(f"[分析 Row#{idx+1}] 本次用的高風險語句數：{len(high_risk_examples)}，倒數兩句：{high_risk_examples[-2:] if high_risk_examples else '空'}")
+    print(f"[分析 Row#{idx+1}] 本次用的升級語句數：{len(escalation_examples)}，倒數兩句：{escalation_examples[-2:] if escalation_examples else '空'}")
+    print(f"[分析 Row#{idx+1}] 本次用的影響多使用者語句數：{len(multi_user_examples)}，倒數兩句：{multi_user_examples[-2:] if multi_user_examples else '空'}")
     try:
         # 原始欄位保留
         description_text = row.get('Description', 'not filled')
@@ -373,10 +388,9 @@ async def analyze_row_async(row, idx, df, weights, component_counts, configurati
             print(f"🟢 [Row#{idx+1}] resolution_text 使用 desc + short_desc + close_notes")
 
 
-
-        keyword_score = is_high_risk(short_desc)
-        user_impact_score = is_multi_user(desc)
-        escalation_score = is_escalated(close_notes)
+        keyword_score = is_high_risk(short_desc, high_risk_examples, high_risk_embeddings)
+        user_impact_score = is_multi_user(desc, multi_user_examples, multi_user_embeddings)
+        escalation_score = is_escalated(close_notes, escalation_examples, escalation_embeddings)
 
         config_raw = configuration_item_counts.get(row.get('Configuration item'), 0)
         configuration_item_freq = config_raw / configuration_item_max if configuration_item_max > 0 else 0
@@ -466,10 +480,233 @@ async def analyze_row_async(row, idx, df, weights, component_counts, configurati
 
 
 
+SENTENCE_DIR = os.path.join("data", "sentences")
+os.makedirs(SENTENCE_DIR, exist_ok=True)
+
+def get_file_path(tag):
+    return os.path.join(SENTENCE_DIR, f"{tag}.json")
+
+@app.route("/get-sentence-db")
+def get_sentence_db():
+    result = []
+    for tag in ["high_risk", "escalate", "multi_user"]:
+        path = get_file_path(tag)
+        if os.path.exists(path):
+            with open(path, encoding='utf-8') as f:
+                sentences = json.load(f)
+                for entry in sentences:
+                    result.append({"text": entry["text"], "tag": tag})
+    return jsonify(result)
+
+@app.route("/save-sentence-db", methods=["POST"])
+def save_sentence():
+    new_entry = request.get_json()
+    tag = new_entry.get("tag")
+    if tag not in ["high_risk", "escalate", "multi_user"]:
+        return jsonify({"message": "invalid tag"}), 400
+
+    path = get_file_path(tag)
+    if os.path.exists(path):
+        with open(path, encoding='utf-8') as f:
+            data = json.load(f)
+    else:
+        data = []
+
+    if any(d['text'] == new_entry['text'] for d in data):
+        return jsonify({"message": "duplicate"}), 409
+
+    data.append({"text": new_entry['text']})
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+    return get_sentence_db()
+
+@app.route("/delete-sentence", methods=["POST"])
+def delete_sentence():
+    req = request.get_json()
+    tag = req.get("tag")
+    text = req.get("text")
+    if tag not in ["high_risk", "escalate", "multi_user"] or not text:
+        return jsonify({"message": "invalid input"}), 400
+
+    path = get_file_path(tag)
+    if not os.path.exists(path):
+        return jsonify({"message": "not found"}), 404
+
+    with open(path, encoding='utf-8') as f:
+        data = json.load(f)
+
+    new_data = [d for d in data if d['text'] != text]
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(new_data, f, ensure_ascii=False, indent=2)
+
+    return get_sentence_db()
+
+@app.route("/edit-sentence", methods=["POST"])
+def edit_sentence():
+    req = request.get_json()
+    tag = req.get("tag")
+    old_text = req.get("oldText")
+    new_text = req.get("newText")
+
+    if tag not in ["high_risk", "escalate", "multi_user"] or not old_text or not new_text:
+        return jsonify({"message": "invalid input"}), 400
+
+    path = get_file_path(tag)
+    if not os.path.exists(path):
+        return jsonify({"message": "not found"}), 404
+
+    with open(path, encoding='utf-8') as f:
+        data = json.load(f)
+
+    updated = False
+    for d in data:
+        if d['text'] == old_text:
+            d['text'] = new_text
+            updated = True
+            break
+
+    if not updated:
+        return jsonify({"message": "not found"}), 404
+
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+    return get_sentence_db()
 
 
 
 
+
+
+
+
+GPT_DATA_DIR = "gpt_data"
+PROMPT_FILE = os.path.join(GPT_DATA_DIR, "gpt_prompts.json")
+MAP_FILE = os.path.join(GPT_DATA_DIR, "gpt_prompt_map.json")
+
+os.makedirs(GPT_DATA_DIR, exist_ok=True)
+
+def read_json(path, default=None):
+    if os.path.exists(path):
+        with open(path, encoding='utf-8') as f:
+            return json.load(f)
+    return default if default is not None else {}
+
+def write_json(path, obj):
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2)
+
+@app.route('/get-gpt-prompts')
+def get_gpt_prompts():
+    all_data = read_json(PROMPT_FILE, {})
+    # 包成 {用途: {"prompts": [...]} }
+    wrapped = {k: {"prompts": v if isinstance(v, list) else [v]} for k, v in all_data.items()}
+    return jsonify(wrapped)
+
+@app.route('/save-gpt-prompt', methods=['POST'])
+def save_gpt_prompt():
+    """
+    新增一筆 prompt 到某個分類。body: { "task": "solution", "prompt": "xxx" }
+    """
+    data = request.get_json()
+    task = data.get('task')
+    prompt = data.get('prompt', '').strip()
+
+    if not task or not prompt:
+        return jsonify(success=False, message='❌ 缺少 task 或 prompt'), 400
+
+    all_prompts = read_json(PROMPT_FILE, {})
+    prompt_list = all_prompts.get(task, [])
+    if not isinstance(prompt_list, list):
+        prompt_list = [prompt_list]
+
+    if prompt not in prompt_list:
+        prompt_list.append(prompt)
+    else:
+        return jsonify(success=False, message='⚠️ 該 prompt 已存在'), 409
+
+    all_prompts[task] = prompt_list
+    write_json(PROMPT_FILE, all_prompts)
+
+    return jsonify(success=True, allPrompts=all_prompts)
+
+@app.route('/delete-gpt-prompt', methods=['POST'])
+def delete_gpt_prompt():
+    """
+    支援刪除分類或分類下的單一句子。
+    body: { "task": "solution", "prompt": "xxx" } 或只給 task 代表整類刪除。
+    """
+    data = request.get_json()
+    task = data.get('task')
+    prompt = data.get('prompt', '').strip()
+
+    all_prompts = read_json(PROMPT_FILE, {})
+
+    if task not in all_prompts:
+        return jsonify(success=False, message=f'找不到用途 {task}'), 404
+
+    if prompt:
+        prompt_list = all_prompts[task]
+        if prompt in prompt_list:
+            prompt_list.remove(prompt)
+            if prompt_list:
+                all_prompts[task] = prompt_list
+            else:
+                del all_prompts[task]
+        else:
+            return jsonify(success=False, message='找不到該 prompt'), 404
+    else:
+        del all_prompts[task]  # 刪整類
+
+    write_json(PROMPT_FILE, all_prompts)
+
+    # 刪掉 mapping 中的對應
+    mapping = read_json(MAP_FILE, {})
+    if task in mapping:
+        del mapping[task]
+        write_json(MAP_FILE, mapping)
+
+    return jsonify(success=True, allPrompts=all_prompts)
+
+@app.route('/get-gpt-prompt-map')
+def get_gpt_prompt_map():
+    return jsonify(read_json(MAP_FILE, {}))
+
+@app.route('/save-gpt-prompt-map', methods=['POST'])
+def save_gpt_prompt_map():
+    data = request.get_json()
+
+    solution_prompt = data.get("solution")
+    summary_prompt = data.get("ai_summary")
+    models = data.get("models", {})
+
+    new_mapping = {
+        "solution": {
+            "prompt": solution_prompt,
+            "model": models.get("solution", "")
+        },
+        "ai_summary": {
+            "prompt": summary_prompt,
+            "model": models.get("ai_summary", "")
+        }
+    }
+
+    write_json(MAP_FILE, new_mapping)
+    return jsonify(success=True, mapping=new_mapping)
+
+def get_prompt_for_use(use_type):
+    mapping = read_json(MAP_FILE, {})
+    all_prompts = read_json(PROMPT_FILE, {})
+    mapped_key = mapping.get(use_type, use_type)
+    prompt_list = all_prompts.get(mapped_key, [])
+    if isinstance(prompt_list, list):
+        return {'prompt': prompt_list[0] if prompt_list else '', 'model': mapping.get(mapped_key, {}).get("model", "")}
+    return {'prompt': prompt_list, 'model': mapping.get(mapped_key, {}).get("model", "")}
+
+# ========== 用法範例 ==========
+# prompt_info = get_prompt_for_use("solution")
+# print(prompt_info.get("model"), prompt_info.get("prompt"))
 
 
 
@@ -652,6 +889,14 @@ async def analyze_row_async(row, idx, df, weights, component_counts, configurati
 
 # ------------------------------------------------------------------------------
 
+
+
+
+
+
+
+
+
 # 定義首頁路由
 @app.route('/')
 def index():
@@ -672,6 +917,15 @@ def history_page():
 @app.route('/generate_cluster')
 def generate_cluster_page():
     return render_template('generate_cluster.html')  # 渲染生成分群頁面
+
+@app.route("/manual_input")
+def manual_input_page():
+    return render_template("manual_input.html")
+
+@app.route("/gpt_prompt")
+def gpt_prompt_page():
+    return render_template("gpt_prompt.html")
+
 
 # ------------------------------------------------------------------------------
 
@@ -926,7 +1180,7 @@ if __name__ == "__main__":
         webbrowser.open("http://127.0.0.1:5000")
     else:
         print("⚠️ Flask 已在運作，不重複開啟瀏覽器")
-    app.run(debug=False, use_reloader=False)
+    app.run(debug=True, use_reloader=True)
 
 
 

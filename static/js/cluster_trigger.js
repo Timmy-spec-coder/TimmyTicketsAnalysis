@@ -21,9 +21,18 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  if (sidebarToggle) {
-    sidebarToggle.textContent = document.body.classList.contains('sidebar-collapsed') ? '→' : '←';
-  }
+    // ✅ 初始化 Sidebar 折疊狀態
+    const isCollapsed = localStorage.getItem("sidebarCollapsed") === "true";
+    document.body.classList.toggle("sidebar-collapsed", isCollapsed);
+    if (sidebarToggle) sidebarToggle.textContent = isCollapsed ? "→" : "←";
+
+    if (sidebarToggle) {
+      sidebarToggle.addEventListener("click", () => {
+        const collapsed = document.body.classList.toggle("sidebar-collapsed");
+        localStorage.setItem("sidebarCollapsed", collapsed);
+        sidebarToggle.textContent = collapsed ? "→" : "←";
+      });
+    }
 
 
     const fileList = document.getElementById('clusteredFileList');
@@ -204,7 +213,9 @@ function navigateTo1(page) {
     upload: "/",
     result: "/result",
     history: "/history",
-    cluster: "/generate_cluster"
+    cluster: "/generate_cluster",
+    manual: "/manual_input",
+    gpt_prompt: "/gpt_prompt",
   };
   if (routes[page]) window.location.href = routes[page];
 }

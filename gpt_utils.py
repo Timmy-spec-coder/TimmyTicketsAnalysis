@@ -103,7 +103,36 @@ def add_to_semantic_cache(text, response):
     print(f"💾 [Cache] 已儲存快取：hash={key[:8]} text='{text[:30]}'")
 
 # 🧠 主功能：從段落中抽出解決建議句（含空值與快取）
-# 🧠 主功能：從段落中抽出解決建議句（含空值與快取）
+
+def get_gpt_prompt_and_model(task="solution"):
+    MAP_PATH = os.path.join("gpt_data", "gpt_prompt_map.json")
+    try:
+        with open(MAP_PATH, "r", encoding="utf-8") as f:
+            config = json.load(f)
+        if config.get(task):
+            prompt = config[task].get("prompt") or ""
+            model = config[task].get("model") or ""
+            # 檢查是否 prompt/model 缺失
+            if not prompt or not model:
+                print(f"⚠️ [PromptMap] {task} 的 prompt 或 model 欄位為空，已啟用預設值！")
+            return prompt, model
+        else:
+            print(f"⚠️ [PromptMap] {task} 設定不存在，已啟用預設值！")
+    except Exception as e:
+        print(f"❌ [PromptMap] 讀取 {task} 設定失敗：{e}")
+    # 回傳預設值
+    if task == "solution":
+        print("⚠️ [PromptMap] 使用 solution 預設 prompt/model")
+        return "請從以下段落提取一個具體的行動建議", DEFAULT_MODEL_SOLUTION
+    elif task == "ai_summary":
+        print("⚠️ [PromptMap] 使用 ai_summary 預設 prompt/model")
+        return "請用一句話描述事件是什麼", DEFAULT_MODEL_SUMMARY
+    else:
+        print(f"⚠️ [PromptMap] 未知用途 {task}，回傳空值")
+        return "", ""
+
+
+
 async def extract_resolution_suggestion(text, model= DEFAULT_MODEL_SOLUTION, source_id=""):
     if not isinstance(text, str) or not text.strip():
         return "（無原始描述）"
@@ -112,6 +141,11 @@ async def extract_resolution_suggestion(text, model= DEFAULT_MODEL_SOLUTION, sou
     if not ALWAYS_ANALYZE and not is_actionable_resolution(text):
         print(f"⏭️ 無語意相近解法語氣，略過分析（{source_id}）：", text[:100])
         return "（未偵測到具體解法語氣，略過分析）"
+
+    # 讀取目前的 prompt 與 model 設定
+    custom_prompt, custom_model = get_gpt_prompt_and_model("solution")
+    model = model or custom_model
+
 
     lines = text.strip().splitlines()
     text_trimmed = "\n".join(lines[:3])
@@ -122,8 +156,7 @@ async def extract_resolution_suggestion(text, model= DEFAULT_MODEL_SOLUTION, sou
         print(f"🎯 快取命中：略過 GPT 分析（{source_id}）")
         return cached
 
-    prompt = f"""Instruction: Summarize 1 actionable solution from the following.\nReply \"No recommendation\" if none. Limit answer to 30 words.\n---\n{text_trimmed}"""
-
+    prompt = f"{custom_prompt}\n---\n{text_trimmed}"
     try:
         result = await call_ollama_model_async(prompt, model)
         print(f"✅ GPT 第一次呼叫成功（{source_id}）")
@@ -144,12 +177,13 @@ async def extract_resolution_suggestion(text, model= DEFAULT_MODEL_SOLUTION, sou
             return "（AI 擷取失敗）"
 
 
-
-
-# 🧠 主功能：擷取問題摘要（同樣支援 source_id）
-async def extract_problem_with_custom_prompt(text, model= DEFAULT_MODEL_SUMMARY, source_id=""):
+async def extract_problem_with_custom_prompt(text, model=None, source_id=""):
     if not isinstance(text, str) or not text.strip():
         return "（無原始描述）"
+
+    # 讀取目前的 prompt 與 model 設定
+    custom_prompt, custom_model = get_gpt_prompt_and_model("ai_summary")
+    model = model or custom_model
 
     lines = text.strip().splitlines()
     text_trimmed = "\n".join(lines[:3])
@@ -160,7 +194,7 @@ async def extract_problem_with_custom_prompt(text, model= DEFAULT_MODEL_SUMMARY,
         print(f"🎯 快取命中：略過 GPT 分析（{source_id}）")
         return cached
 
-    prompt = f"""You're an assistant. Read the following incident note and summarize what issue or problem it describes, in one clear sentence.\nDo not suggest a solution. Only summarize the problem.\nLimit to 30 words.\n---\n{text_trimmed}"""
+    prompt = f"{custom_prompt}\n---\n{text_trimmed}"
 
     try:
         result = await call_ollama_model_async(prompt, model)
@@ -170,7 +204,6 @@ async def extract_problem_with_custom_prompt(text, model= DEFAULT_MODEL_SUMMARY,
     except Exception as e1:
         print(f"⚠️ GPT 第一次呼叫失敗（{source_id}）：{e1}")
         print(f"🔁 正在重新嘗試第 2 次 GPT 呼叫...（{source_id}）")
-
         await asyncio.sleep(2)
         try:
             result = await call_ollama_model_async(prompt, model)
@@ -180,7 +213,7 @@ async def extract_problem_with_custom_prompt(text, model= DEFAULT_MODEL_SUMMARY,
         except Exception as e2:
             print(f"⛔ GPT 第二次呼叫也失敗（{source_id}）：{e2}")
             return "（AI 擷取失敗）"
-
+# 🧠 主功能：擷取問題摘要（同樣支援 source_id）
 
 # 📊 快取命中率報告
 def print_cache_report():

@@ -360,5 +360,9 @@ function navigateTo1(page) {
         window.location.href = '/history';
     } else if (page === 'cluster') {
         window.location.href = '/generate_cluster';  // ✅ 對應後端路由名稱
+    } else if (page === 'manual') {
+        window.location.href = '/manual_input';  // ✅ 對應後端路由名稱
+    } else if (page === 'gpt_prompt') {
+        window.location.href = '/gpt_prompt';  // ✅ 對應後端路由名稱
     }
 }
