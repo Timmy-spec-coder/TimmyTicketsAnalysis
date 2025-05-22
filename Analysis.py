@@ -261,6 +261,10 @@ def cluster_excel_export(results, export_dir="excel_result_Clustered"):
     print("✅ 分群 Excel 檔案已儲存！")
 
 
+
+
+
+
 # 用於同步 Flask 路由呼叫 async 分析邏輯
 def analyze_excel(filepath, weights=None):
     return asyncio.run(analyze_excel_async(filepath, weights))
@@ -474,6 +478,10 @@ async def analyze_row_async(row, idx, df, weights, component_counts, configurati
     except Exception as e:
         print(f"❌ 分析第 {idx + 1} 筆失敗：", e)
         return None
+
+
+
+
 
 
 
