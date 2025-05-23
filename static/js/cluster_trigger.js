@@ -129,6 +129,7 @@ fetch('/clustered-files')
     button.disabled = true;
     status.textContent = "⏳ 分群中，請稍候...";
     status.style.color = "#aaa";
+    copyBtn.disabled = true;    // 👈 按下分群時就讓複製結果再度不能按
 
     try {
       const response = await fetch("/cluster-excel", {
@@ -145,14 +146,20 @@ fetch('/clustered-files')
 
         showToast(result.message);
         scrollToElement(status);
+        copyBtn.disabled = false;
+
       } else {
         status.textContent = "❌ 分群失敗或無回傳訊息。";
         status.style.color = "red";
+        copyBtn.disabled = true;   // 👈 失敗時還是不能按
+
       }
     } catch (err) {
       console.error(err);
       status.textContent = "❌ 無法與伺服器連線。";
       status.style.color = "red";
+      copyBtn.disabled = true;     // 👈 失敗時還是不能按
+
     } finally {
       button.disabled = false;
     }
@@ -168,13 +175,20 @@ fetch('/clustered-files')
   }
 
   copyBtn.addEventListener("click", () => {
-    if (!lastMessage) return;
-
-    navigator.clipboard.writeText(lastMessage).then(() => {
-      copyBtn.innerText = "✅ 已複製！";
-      setTimeout(() => (copyBtn.innerText = "📋 複製結果"), 2000);
+    const fileList = document.getElementById("clusteredFileList");
+    if (!fileList) return;
+    let filesText = "";
+    fileList.querySelectorAll("li").forEach(li => {
+      filesText += li.textContent.trim() + "\n";
     });
+    if (filesText.trim()) {
+      navigator.clipboard.writeText(filesText).then(() => {
+        copyBtn.innerText = "✅ 已複製！";
+        setTimeout(() => (copyBtn.innerText = "📋 複製結果"), 2000);
+      });
+    }
   });
+
 
     function scrollToElement(el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });

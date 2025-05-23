@@ -395,6 +395,16 @@ body.dark-mode .form-text.text-muted {
 }
 
 
+.accordion-button {
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+body.dark-mode .accordion-button {
+  background: #23234d;
+  color: #ffe082;
+}
+
 
 /* 側邊欄收合效果 */
 
