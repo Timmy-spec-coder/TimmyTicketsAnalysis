@@ -147,21 +147,21 @@ fetch('/clustered-files')
         showToast(result.message);
         scrollToElement(status);
         copyBtn.disabled = false;
+        button.disabled = true;  // 🟢 這裡直接 disable，永遠不能再按
 
       } else {
         status.textContent = "❌ 分群失敗或無回傳訊息。";
         status.style.color = "red";
         copyBtn.disabled = true;   // 👈 失敗時還是不能按
-
+        button.disabled = false; // 失敗還能再按
       }
     } catch (err) {
       console.error(err);
       status.textContent = "❌ 無法與伺服器連線。";
       status.style.color = "red";
       copyBtn.disabled = true;     // 👈 失敗時還是不能按
-
+      button.disabled = false; // 失敗還能再按
     } finally {
-      button.disabled = false;
     }
   });
 
