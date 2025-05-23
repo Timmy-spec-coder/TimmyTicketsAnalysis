@@ -10,8 +10,8 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
-<body class="dark-mode">
 
+<body class="dark-mode">
   <!-- Sidebar -->
   <div class="sidebar" id="sidebar">
     <h4>功能選單</h4>
@@ -41,32 +41,6 @@
           <!-- JS 動態渲染目前用的 Prompt 與 GPT -->
         </div>
       </div>
-
-      <!-- 新增／編輯 Prompt 區 -->
-<!-- 新增／編輯 Prompt 區 -->
-<div class="card mb-5 shadow gpt-mapping-card w-100">
-  <div class="card-body">
-    <h5 class="mb-4 gpt-section-title">➕ 新增 GPT Prompt</h5>
-    <p class="gpt-muted-desc mb-4">
-      請選擇用途並輸入對應的 GPT Prompt 內容。
-    </p>
-    <form id="gptPromptForm">
-      <div class="mb-3">
-        <label class="form-label">選擇用途：</label>
-        <select class="form-select" id="promptTask">
-          <option value="solution">Solution（AI解決建議）</option>
-          <option value="ai_summary">AI Summary（AI問題摘要）</option>
-        </select>
-      </div>
-      <div class="mb-3">
-        <label class="form-label">GPT Prompt 內容：</label>
-        <textarea class="form-control gpt-textarea" rows="5" id="promptText" required placeholder="請輸入此用途的 prompt..."></textarea>
-      </div>
-      <button type="submit" class="btn btn-primary w-100">新增</button>
-    </form>
-  </div>
-</div>
-
       <!-- Mapping 對應區 -->
       <div class="card shadow mt-5 mb-4 gpt-mapping-card1 w-100">
         <div class="card-body">
@@ -116,6 +90,29 @@
           <div id="allPromptList" class="mt-4"></div>
         </div>
       </div>
+      <!-- 新增／編輯 Prompt 區 -->
+      <div class="card mb-5 shadow gpt-mapping-card w-100">
+        <div class="card-body">
+          <h5 class="mb-4 gpt-section-title">➕ 新增 GPT Prompt</h5>
+          <p class="gpt-muted-desc mb-4">
+            請選擇用途並輸入對應的 GPT Prompt 內容。
+          </p>
+          <form id="gptPromptForm">
+            <div class="mb-3">
+              <label class="form-label">選擇用途：</label>
+              <select class="form-select" id="promptTask">
+                <option value="solution">Solution（AI解決建議）</option>
+                <option value="ai_summary">AI Summary（AI問題摘要）</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">GPT Prompt 內容：</label>
+              <textarea class="form-control gpt-textarea" rows="5" id="promptText" required placeholder="請輸入此用途的 prompt..."></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">新增</button>
+          </form>
+        </div>
+      </div>
 
     </div>
   </div>
@@ -126,25 +123,23 @@
   <!-- 獨立 JS：gpt_prompt.js -->
   <script src="{{ url_for('static', filename='js/gpt_prompt.js') }}"></script>
 
-  <!-- 編輯 Prompt 的 Modal -->
-<div class="modal fade" id="editPromptModal" tabindex="-1" aria-labelledby="editPromptModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-lg modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="editPromptModalLabel">編輯 GPT Prompt</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="關閉"></button>
-      </div>
-      <div class="modal-body">
-        <textarea id="editPromptTextarea" class="form-control" rows="5"></textarea>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-        <button type="button" class="btn btn-primary" id="saveEditPromptBtn">儲存</button>
+    <!-- 編輯 Prompt 的 Modal -->
+  <div class="modal fade" id="editPromptModal" tabindex="-1" aria-labelledby="editPromptModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="editPromptModalLabel">編輯 GPT Prompt</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="關閉"></button>
+        </div>
+        <div class="modal-body">
+          <textarea id="editPromptTextarea" class="form-control" rows="5"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="button" class="btn btn-primary" id="saveEditPromptBtn">儲存</button>
+        </div>
       </div>
     </div>
   </div>
-</div>
-
-
 </body>
 </html>
