@@ -244,7 +244,8 @@ function navigateTo1(page) {
     history: "/history",
     cluster: "/generate_cluster",
     manual: "/manual_input",
-    gpt_prompt: "/gpt_prompt"
+    gpt_prompt: "/gpt_prompt",
+    chat: "/chat_ui"
   };
   window.location.href = paths[page] || "/";
 }

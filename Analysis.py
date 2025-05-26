@@ -2,9 +2,14 @@
 from flask import Flask, request, jsonify, render_template, session, send_file
 from gpt_utils import extract_resolution_suggestion
 from gpt_utils import extract_problem_with_custom_prompt
+from gptChat import run_offline_gpt
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
 from collections import Counter
+import hashlib
+import subprocess
+import sys
+from pathlib import Path
 import umap
 import hdbscan
 # 匯入數學運算模組
@@ -978,8 +983,73 @@ def manual_input_page():
 def gpt_prompt_page():
     return render_template("gpt_prompt.html")
 
+@app.route("/chat_ui")
+def helpdesk_ui():
+    return render_template("chat.html")
+
+
 
 # ------------------------------------------------------------------------------
+
+
+@app.route("/chat", methods=["POST"])
+def chat_with_model():
+    data = request.get_json()
+    message = data.get("message", "")
+    model = data.get("model", "mistral")  # 預設使用 mistral
+    history = data.get("history", [])
+
+    try:
+        # ❗這裡呼叫你自己處理模型回應的函式，例如：
+        reply = run_offline_gpt(message, model=model, history=history)
+
+        # ✅ 儲存歷史（寫入 JSON 檔）
+        uid = hashlib.md5((message + model).encode()).hexdigest()[:10]
+        history_record = {
+            "id": uid,
+            "timestamp": datetime.now().isoformat(),
+            "model": model,
+            "history": history + [{"role": "user", "content": message}, {"role": "assistant", "content": reply}]
+        }
+        os.makedirs("chat_history", exist_ok=True)
+        with open(f"chat_history/{uid}.json", "w", encoding="utf-8") as f:
+            json.dump(history_record, f, ensure_ascii=False, indent=2)
+
+        return jsonify({"reply": reply, "id": uid})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/chat-history-list")
+def get_chat_history_list():
+    records = []
+    path = Path("chat_history")
+    if not path.exists():
+        return jsonify([])
+
+    for file in path.glob("*.json"):
+        with open(file, encoding="utf-8") as f:
+            try:
+                obj = json.load(f)
+                records.append({
+                    "id": obj.get("id"),
+                    "timestamp": obj.get("timestamp"),
+                    "model": obj.get("model")
+                })
+            except:
+                continue
+    return jsonify(sorted(records, key=lambda x: x["timestamp"], reverse=True))
+
+@app.route("/chat-history/<id>")
+def get_chat_history_by_id(id):
+    file_path = Path(f"chat_history/{id}.json")
+    if not file_path.exists():
+        return jsonify({"error": "not found"}), 404
+    with open(file_path, encoding="utf-8") as f:
+        return jsonify(json.load(f))
+
+
 
 
 @app.route('/preview-excel', methods=['POST'])
@@ -1004,27 +1074,26 @@ def preview_excel():
 def ping():
     return "pong", 200
 
-
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    print("📥 收到上傳請求")  # 紀錄請求
+    print("📥 收到上傳請求")
 
-    if 'file' not in request.files:  # 檢查是否有檔案欄位
+    if 'file' not in request.files:
         print("❌ 沒有 file 欄位")
         return jsonify({'error': '沒有找到檔案欄位'}), 400
 
-    file = request.files['file']  # 取得檔案
-    if file.filename == '':  # 檢查檔案名稱是否為空
+    file = request.files['file']
+    if file.filename == '':
         print("⚠️ 檔案名稱為空")
         return jsonify({'error': '未選擇檔案'}), 400
 
-    if not allowed_file(file.filename):  # 檢查檔案格式是否允許
+    if not allowed_file(file.filename):
         print("⚠️ 檔案類型不符")
         return jsonify({'error': '請上傳 .xlsx 檔案'}), 400
 
-    # ✅ 接收自訂權重
-    weights_raw = request.form.get('weights')
+    # 接收權重設定
     weights = None
+    weights_raw = request.form.get('weights')
     if weights_raw:
         try:
             weights = json.loads(weights_raw)
@@ -1035,7 +1104,7 @@ def upload_file():
     else:
         print("ℹ️ 未提供自訂權重，使用預設值分析")
 
-    # ✅ 接收 Resolution / Summary 欄位順位
+    # 解析 resolution/summary 欄位順位
     try:
         resolution_priority = json.loads(request.form.get('resolution_priority', '[]'))
         summary_priority = json.loads(request.form.get('summary_priority', '[]'))
@@ -1058,7 +1127,7 @@ def upload_file():
         return jsonify({'error': f'儲存原始檔失敗：{str(e)}'}), 500
 
     try:
-        # ✅ 呼叫分析（新增傳入 resolution_priority 與 summary_priority）
+        # 呼叫分析主邏輯
         analysis_result = analyze_excel(
             original_path,
             weights=weights,
@@ -1068,6 +1137,21 @@ def upload_file():
         results = analysis_result['data']
         save_analysis_files(analysis_result, uid)
         print(f"✅ 分析完成，共 {len(results)} 筆")
+
+
+
+
+        # 自動觸發建庫腳本
+        print("🚀 自動執行 build_kb.py 建立知識庫")
+        # 呼叫本地的 Python 執行 build_kb.py（保證和 Flask 用同一個解譯器）
+        script_path = os.path.join(os.path.dirname(__file__), "build_kb.py")
+        print("🚀 嘗試用 sys.executable 執行：", script_path)
+        subprocess.Popen([sys.executable, script_path])
+
+
+
+        
+
         session['analysis_data'] = results
         return jsonify({'data': results, 'uid': uid, 'weights': weights}), 200
 
@@ -1076,6 +1160,7 @@ def upload_file():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+    
     
 def save_analysis_files(result, uid):
     os.makedirs('json_data', exist_ok=True)
@@ -1111,6 +1196,16 @@ def save_analysis_files(result, uid):
         print("📁 原始檔絕對路徑：", original_excel_path)
     else:
         print("⚠️ 找不到原始 Excel 路徑！")
+
+
+
+@app.route('/kb-status')
+def kb_status():
+    lock_exists = os.path.exists("kb_building.lock")
+    print(f"[DEBUG] lock file exists? {lock_exists}")
+    return jsonify({"building": lock_exists})
+
+
 
 
 @app.route('/get-results')

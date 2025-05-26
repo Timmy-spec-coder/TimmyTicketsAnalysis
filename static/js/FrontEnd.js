@@ -357,7 +357,9 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
             summary: summaryBox.innerHTML,
             analysisTime: data.data[0]?.analysisTime || new Date().toISOString(),
             data: data.data
-        })); // 儲存最後的結果到 localStorage
+            })); // 儲存最後的結果到 localStorage
+
+            pollKbStatus();
 
 
             if (data.error) {
@@ -465,8 +467,7 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
             });
 
             updateSummary(data.data); // 更新統計摘要
-            toast.classList.add('show'); // 顯示提示訊息
-            setTimeout(() => toast.classList.remove('show'), 6000); // 6 秒後隱藏提示訊息
+            // 顯示分析完成提示
             const analysisTime = data.data[0]?.analysisTime || '未知時間';
             addHistoryItem(data.uid, file.name, summaryBox.innerText, analysisTime);
 
@@ -816,21 +817,26 @@ function navigateTo(id) {
 }
 
 // 導航到不同的頁面
+// 導航到不同的頁面，若知識庫建立中則中止跳轉
 function navigateTo1(page) {
-    if (page === 'upload') {
-        window.location.href = '/'; // 導向首頁
-    } else if (page === 'result') {
-        window.location.href = '/result'; // 導向結果頁面
-    } else if (page === 'history') {
-        window.location.href = '/history'; // 導向歷史記錄頁面
-    } else if (page === 'cluster') {
-        window.location.href = '/generate_cluster';  // ✅ 對應後端路由名稱
-    } else if (page === 'manual') {
-        window.location.href = '/manual_input'; // 導向手冊頁面
-    } else if (page === 'gpt_prompt') {
-        window.location.href = '/gpt_prompt'; // 導向 GPT Prompt 管理頁面
+    if (window.kbBuilding) {
+        alert("⚠️ 知識庫建立中，請稍候完成後再切換頁面！");
+        return; // 中止導頁
     }
+
+    const paths = {
+        upload: "/",
+        result: "/result",
+        history: "/history",
+        cluster: "/generate_cluster",
+        manual: "/manual_input",
+        gpt_prompt: "/gpt_prompt",
+        chat: "/chat_ui"
+    };
+
+    window.location.href = paths[page] || "/";
 }
+
 
 function showToast() {
     // 獲取 ID 為 'toast' 的 HTML 元素
@@ -840,6 +846,77 @@ function showToast() {
     // 設置一個定時器，3 秒後將該元素的顯示樣式設置為 'none'，使其隱藏
     setTimeout(() => { toast.style.display = 'none'; }, 3000);
 }
+
+function hideToast() {
+  const toast = document.getElementById('toast');
+  toast.style.display = 'none';
+}
+// 更新權重總和的函數
+
+
+let kbPolling = null;
+let lastKbStatus = null; // 全域
+
+function showKbStatusBar() {
+  const bar = document.getElementById("kbStatusBar");
+  if (bar) bar.style.display = "block";
+
+  // ✅ 禁止離開、跳頁（包含重新整理、其他 html）
+  window.onbeforeunload = (e) => {
+    e.preventDefault();
+    e.returnValue = "知識庫正在建立中，確定要離開？";
+    return "知識庫正在建立中，確定要離開？";
+  };
+}
+
+function hideKbStatusBar() {
+  const bar = document.getElementById("kbStatusBar");
+  if (bar) bar.style.display = "none";
+
+  // ✅ 解鎖離開
+  window.onbeforeunload = null;
+}
+
+
+function pollKbStatus() {
+  if (kbPolling) clearInterval(kbPolling);
+
+  kbPolling = setInterval(async () => {
+    const res = await fetch("/kb-status");
+    const data = await res.json();
+
+    console.log("polling...", data);
+
+    if (data.building) {
+      window.kbBuilding = true;       // ✅ 開始建構
+      showKbStatusBar();
+      lastKbStatus = true;
+    } else {
+      window.kbBuilding = false;      // ✅ 結束建構
+      hideKbStatusBar();
+      if (lastKbStatus === true) {
+        showToastMessage("✅ 知識庫已建立完成！", "success", 10000);
+        lastKbStatus = false;
+      }
+      clearInterval(kbPolling);
+    }
+  }, 2000);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// 你可以在上傳、分析、或任何新檔案存檔事件後自動呼叫 onAnalyzeFinish()
 
 function showPreview(item) {
     // 獲取 ID 為 'modalContent' 的 HTML 元素
@@ -873,4 +950,14 @@ function showPreview(item) {
     }
     // 顯示模態框
     previewModalInstance.show();
+}
+
+function showKbStatusBar() {
+  const bar = document.getElementById('kbStatusBar');
+  if (bar) bar.style.display = 'block';
+}
+
+function hideKbStatusBar() {
+  const bar = document.getElementById('kbStatusBar');
+  if (bar) bar.style.display = 'none';
 }

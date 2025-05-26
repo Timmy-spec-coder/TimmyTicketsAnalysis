@@ -18,6 +18,27 @@
 
 </head>
 <body class="dark-mode">
+<div id="kbStatusBar" style="
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: #fff3cd;
+  color: #856404;
+  padding: 10px;
+  font-weight: bold;
+  text-align: center;
+  z-index: 9999;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  font-family: 'Inter', sans-serif;
+  letter-spacing: 0.3px;
+  overflow: hidden;
+">
+  正在建立知識庫，請稍候<span class="dots"></span>
+</div>
+
+
     <div class="sidebar" id="sidebar">
         <h4>功能選單</h4>
         <ul>
@@ -27,6 +48,8 @@
             <li onclick="navigateTo1('cluster')"><i class="fas fa-project-diagram"></i> 分群產生</li>
             <li onclick="navigateTo1('manual')"><i class="fas fa-edit"></i> 語句資料庫</li>
             <li onclick="navigateTo1('gpt_prompt')"><i class="fas fa-robot"></i> GPT Prompt 管理</li>
+            <li onclick="navigateTo1('chat')"><i class="fas fa-comments"></i> Helpdesk</li>
+
   
         </ul>
         <!-- 🌙 深色模式切換按鈕放在最下方 -->
