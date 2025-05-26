@@ -133,7 +133,7 @@ def get_gpt_prompt_and_model(task="solution"):
 
 
 
-async def extract_resolution_suggestion(text, model= DEFAULT_MODEL_SOLUTION, source_id=""):
+async def extract_resolution_suggestion(text, model=DEFAULT_MODEL_SOLUTION, source_id=""):
     if not isinstance(text, str) or not text.strip():
         return "（無原始描述）"
 
@@ -146,7 +146,6 @@ async def extract_resolution_suggestion(text, model= DEFAULT_MODEL_SOLUTION, sou
     custom_prompt, custom_model = get_gpt_prompt_and_model("solution")
     model = model or custom_model
 
-
     lines = text.strip().splitlines()
     text_trimmed = "\n".join(lines[:3])
     print(f"🔍 [GPT] 準備擷取解決建議：{text_trimmed[:30]}...（{source_id}）")
@@ -157,24 +156,25 @@ async def extract_resolution_suggestion(text, model= DEFAULT_MODEL_SOLUTION, sou
         return cached
 
     prompt = f"{custom_prompt}\n---\n{text_trimmed}"
-    try:
-        result = await call_ollama_model_async(prompt, model)
-        print(f"✅ GPT 第一次呼叫成功（{source_id}）")
-        add_to_semantic_cache(text_trimmed, result)
-        return result
-    except Exception as e1:
-        print(f"⚠️ GPT 第一次呼叫失敗（{source_id}）：{e1}")
-        print(f"🔁 正在重新嘗試第 2 次 GPT 呼叫...（{source_id}）")
+    max_retry = 5
+    retry_count = 0
 
-        await asyncio.sleep(2)
+    while retry_count < max_retry:
         try:
             result = await call_ollama_model_async(prompt, model)
-            print(f"✅ GPT 第二次呼叫成功（{source_id}）")
-            add_to_semantic_cache(text_trimmed, result)
-            return result
-        except Exception as e2:
-            print(f"⛔ GPT 第二次呼叫也失敗（{source_id}）：{e2}")
-            return "（AI 擷取失敗）"
+            if result and "擷取失敗" not in result and "未偵測" not in result:
+                print(f"✅ GPT (擷取解決建議)第 {retry_count + 1} 次呼叫成功（{source_id}）")
+                add_to_semantic_cache(text_trimmed, result)
+                return result
+            else:
+                print(f"⚠️ GPT 回傳內容不完整，第 {retry_count + 1} 次結果為：{result[:30]}...")
+        except Exception as e:
+            print(f"⚠️ GPT 呼叫失敗（第 {retry_count + 1} 次）（{source_id}）：{e}")
+        retry_count += 1
+        await asyncio.sleep(2)
+
+    print(f"⛔ GPT 分析失敗（{source_id}），已達最大重試次數 {max_retry} 次")
+    return "（AI (擷取解決建議)擷取失敗）"
 
 
 async def extract_problem_with_custom_prompt(text, model=None, source_id=""):
@@ -191,28 +191,29 @@ async def extract_problem_with_custom_prompt(text, model=None, source_id=""):
 
     cached = find_semantic_cache(text_trimmed, source_id=source_id)
     if cached:
-        print(f"🎯 快取命中：略過 GPT 分析（{source_id}）")
+        print(f"🎯 快取命中：略過 GPT (擷取問題摘要) 分析（{source_id}）")
         return cached
 
     prompt = f"{custom_prompt}\n---\n{text_trimmed}"
+    max_retry = 5
+    retry_count = 0
 
-    try:
-        result = await call_ollama_model_async(prompt, model)
-        print(f"✅ GPT 第一次呼叫成功（{source_id}）")
-        add_to_semantic_cache(text_trimmed, result)
-        return result
-    except Exception as e1:
-        print(f"⚠️ GPT 第一次呼叫失敗（{source_id}）：{e1}")
-        print(f"🔁 正在重新嘗試第 2 次 GPT 呼叫...（{source_id}）")
-        await asyncio.sleep(2)
+    while retry_count < max_retry:
         try:
             result = await call_ollama_model_async(prompt, model)
-            print(f"✅ GPT 第二次呼叫成功（{source_id}）")
-            add_to_semantic_cache(text_trimmed, result)
-            return result
-        except Exception as e2:
-            print(f"⛔ GPT 第二次呼叫也失敗（{source_id}）：{e2}")
-            return "（AI 擷取失敗）"
+            if result and "擷取失敗" not in result and "未偵測" not in result:
+                print(f"✅ GPT (擷取問題摘要) 第 {retry_count + 1} 次呼叫成功（{source_id}）")
+                add_to_semantic_cache(text_trimmed, result)
+                return result
+            else:
+                print(f"⚠️ GPT 回傳內容不完整，第 {retry_count + 1} 次結果為：{result[:30]}...")
+        except Exception as e:
+            print(f"⚠️ GPT (擷取問題摘要) 第 {retry_count + 1} 次呼叫失敗（{source_id}）：{e}")
+        retry_count += 1
+        await asyncio.sleep(2)
+
+    print(f"⛔ GPT (擷取問題摘要) 分析失敗（{source_id}），已達最大重試次數 {max_retry} 次")
+    return "（AI (擷取問題摘要)擷取失敗）"
 # 🧠 主功能：擷取問題摘要（同樣支援 source_id）
 
 # 📊 快取命中率報告
