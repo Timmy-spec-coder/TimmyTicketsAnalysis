@@ -26,6 +26,19 @@ window.addEventListener("DOMContentLoaded", () => {
     sidebarToggle.textContent = collapsed ? "→" : "←";
   };
 
+    // 加在最後面
+  const collapse = document.getElementById('collapseSentences');
+  const btn = document.getElementById('toggleAccordionBtn');
+  if (collapse && btn) {
+    collapse.addEventListener('show.bs.collapse', function () {
+      btn.innerText = '點擊關閉';
+    });
+
+    collapse.addEventListener('hide.bs.collapse', function () {
+      btn.innerText = '點擊展開';
+    });
+}
+
   // 讀取語句資料
   listContainer.innerHTML = `<p class="text-info">🔄 正在載入語句資料...</p>`;
   fetch("/get-sentence-db")
