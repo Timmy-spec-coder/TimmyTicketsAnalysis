@@ -68,9 +68,9 @@ def extract_texts_from_json(json_file):
             items = [data]
         kb_texts = []
         for item in items:
-            problem_summary = item.get("problemSummary") or ""
-            solution = item.get("solution") or ""
-            text = f"問題：{problem_summary}\n處理方式：{solution}"
+            ai_summary = item.get("aiSummary") or item.get("problemSummary") or "(AI 擷取失敗)"
+            solution = item.get("solution") or "(AI 擷取失敗)"
+            text = f"問題：{ai_summary}\n處理方式：{solution}"
             kb_texts.append(text)
         return kb_texts
 

@@ -22,6 +22,33 @@ def load_kb():
 # ⚠️ 注意，這三個變數全域宣告
 kb_model, kb_index, kb_texts = load_kb()
 
+
+def summarize_retrieved_kb(retrieved, model="phi4-mini"):
+    if not retrieved:
+        return ""
+    
+    prompt = "請根據以下知識庫內容，整理出一段精簡摘要，幫助我更快理解處理方式與重點：\n\n"
+    for i, chunk in enumerate(retrieved, 1):
+        prompt += f"{i}. {chunk.strip()}\n"
+    prompt += "\n請幫我統整出一段摘要："
+
+    try:
+        result = subprocess.run(
+            ["ollama", "run", model],
+            input=prompt.encode("utf-8"),
+            capture_output=True,
+            timeout=60
+        )
+
+        if result.returncode != 0:
+            print("⚠️ 壓縮模型錯誤：", result.stderr.decode("utf-8"))
+            return ""
+        return result.stdout.decode("utf-8").strip()
+    except Exception as e:
+        print(f"⚠️ 壓縮時發生錯誤：{str(e)}")
+        return ""
+
+
 def search_knowledge_base(query, top_k=3):
     if kb_model is None or kb_index is None or kb_texts is None:
         return []
@@ -48,7 +75,12 @@ def run_offline_gpt(message, model="mistral", history=[]):
     else:
         print("\n[RAG] ⚠️ 未使用知識庫（未找到相似資料）")
 
-    kb_context = "\n".join([f"🔍相關資料：{chunk}" for chunk in retrieved]) if retrieved else ""
+    # ✅ 顯示模型選擇
+    print(f"[🔧 壓縮用模型] 使用模型：phi4-mini")
+    print(f"[🎯 回答用模型] 使用模型：{model}")
+
+    kb_context = summarize_retrieved_kb(retrieved, model="phi4-mini")  # ✅ 固定用壓縮模型
+
 
     # 🔁 組合歷史對話（最多取 5 筆）
     context = ""
