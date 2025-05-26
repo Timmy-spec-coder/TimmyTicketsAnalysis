@@ -98,11 +98,50 @@
     </div>
 
 </fieldset>
+
 <div id="weightTotalHint" style="margin-top: 8px; font-weight: 500;">
   <p id="severitySumRow" class="weight-ok">🧠 嚴重性加總：<span id="severitySum">0.00</span> / 建議：1.00</p>
   <p id="frequencySumRow" class="weight-ok">📊 頻率加總：<span id="frequencySum">0.00</span> / 建議：1.00</p>
-  <p id="totalSumRow" class="weight-ok">🔢 總加總：<span id="weightSum">0.00</span> / 建議：2.00</p>
+  <p id="totalSumRow" class="weight-ok">🔢 總加總：<span id="weightSum">0.00</span> / 建議：2.00</p><br>
 </div>
+
+<!-- ✅ Excel 預覽表格區塊 -->
+<div id="previewTableArea" class="mt-4 mb-4" style="display:none;">
+  <h5>📋 Excel 檔案預覽（僅前 50 筆）</h5>
+  <div id="previewTableWrapper" style="overflow-x: auto;"></div>
+</div>
+
+<!-- ✅ GPT 欄位順位選擇 -->
+<div id="fieldSelectorBlock" class="card mt-4 p-4" style="display:none;">
+  <h5>🧠 GPT 欄位判斷順位設定</h5>
+
+  <div class="row">
+    <div class="col-md-4">
+      <label class="form-label">Resolution 順位一</label>
+      <select class="form-select" id="resolutionField1"></select>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Resolution 順位二</label>
+      <select class="form-select" id="resolutionField2"></select>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Resolution 順位三</label>
+      <select class="form-select" id="resolutionField3"></select>
+    </div>
+  </div>
+
+  <div class="row mt-3">
+    <div class="col-md-6">
+      <label class="form-label">Summary 順位一</label>
+      <select class="form-select" id="summaryField1"></select>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Summary 順位二</label>
+      <select class="form-select" id="summaryField2"></select>
+    </div>
+  </div>
+</div><br><br>
+
 
 
 

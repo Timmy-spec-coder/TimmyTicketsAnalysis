@@ -1,10 +1,83 @@
 const summaryBox = document.getElementById('summary'); // 取得顯示統計摘要的 DOM 元素
 const historyList = document.getElementById('historyList'); // 取得顯示歷史記錄的 DOM 元素
 const dropArea = document.getElementById('dropArea'); // 取得拖曳上傳區域的 DOM 元素
+const previewTableWrapper = document.getElementById('previewTableWrapper'); // 取得預覽表格的包裹元素
 const HISTORY_MINUTES_LIMIT = 60 * 24 * 30; // ✅ 這代表 30 天（60 分鐘 * 24 小時 * 30 天）
 let droppedFile = null; // 用來暫存拖曳上傳的檔案
 let previewModalInstance = null; // 用來保存 Bootstrap Modal 的實例
 
+
+
+ function updateWeightSum() {
+  const severityFields = ['weightKeyword', 'weightMultiUser', 'weightEscalation'];
+  const frequencyFields = ['weightConfigItem', 'weightRoleComponent', 'weightTimeCluster'];
+
+  let severitySum = 0;
+  let frequencySum = 0;
+
+  severityFields.forEach(id => {
+    const val = parseFloat(document.getElementById(id)?.value || '0');
+    if (!isNaN(val)) severitySum += val;
+  });
+
+  frequencyFields.forEach(id => {
+    const val = parseFloat(document.getElementById(id)?.value || '0');
+    if (!isNaN(val)) frequencySum += val;
+  });
+
+  const total = severitySum + frequencySum;
+
+  // 更新數字
+  document.getElementById('severitySum').textContent = severitySum.toFixed(2);
+  document.getElementById('frequencySum').textContent = frequencySum.toFixed(2);
+  document.getElementById('weightSum').textContent = total.toFixed(2);
+
+
+
+  // 個別錯誤標紅
+  const severityRow = document.getElementById('severitySumRow');
+  const frequencyRow = document.getElementById('frequencySumRow');
+    const totalSumRow = document.getElementById('totalSumRow'); // 👈 新增這行
+
+const severityTooMuch = severitySum > 1.001;
+const frequencyTooMuch = frequencySum > 1.001;
+const totalTooMuch = total > 2.001;
+
+
+
+// 清除原有狀態
+severityRow.classList.remove('weight-warn', 'weight-ok');
+frequencyRow.classList.remove('weight-warn', 'weight-ok');
+totalSumRow.classList.remove('weight-warn', 'weight-ok');
+
+// 僅當「超過」才給紅色，其餘顯示正常
+severityRow.classList.add(severityTooMuch ? 'weight-warn' : 'weight-ok');
+frequencyRow.classList.add(frequencyTooMuch ? 'weight-warn' : 'weight-ok');
+totalSumRow.classList.add(totalTooMuch ? 'weight-warn' : 'weight-ok');
+
+const submitBtn = document.getElementById('submitBtn');
+const allValid =
+  severitySum <= 1.001 &&
+  frequencySum <= 1.001 &&
+  total <= 2.001;
+
+
+submitBtn.disabled = !allValid;
+
+
+
+// --- 加總計算完後，檢查是否超過建議值（即時提醒） ---
+if (severitySum > 1.001) {
+  showToastMessage(`⚠️ 嚴重性權重加總已超過 1（目前為 ${severitySum.toFixed(2)}）`, 'error');
+}
+if (frequencySum > 1.001) {
+  showToastMessage(`⚠️ 頻率權重加總已超過 1（目前為 ${frequencySum.toFixed(2)}）`, 'error');
+}
+if (total > 2.001) {
+  showToastMessage(`⚠️ 總權重加總已超過 2（目前為 ${total.toFixed(2)}）`, 'error');
+}
+
+}
 
 
 
@@ -54,6 +127,8 @@ document.getElementById('resetWeightsBtn').addEventListener('click', () => {
   localStorage.setItem('customWeights', JSON.stringify(defaultWeights)); // ✅ 同步清掉自訂值
 
   showToastMessage('✅ 已重設為預設權重！', 'success'); // ✅ 綠色提示
+  updateWeightSum(); // ✅ 加這行來即時刷新畫面加總與 submit 狀態
+
 });
 
 
@@ -115,6 +190,13 @@ toast.innerHTML = `
 // 表單提交事件
 document.getElementById('uploadForm').addEventListener('submit', function(e) {
     e.preventDefault(); // 阻止表單的預設提交行為（避免整頁刷新）
+
+
+    
+
+
+
+
     const fileInput = document.getElementById('excelFile'); // 取得檔案輸入框
     const file = droppedFile || fileInput.files[0]; // 優先使用拖曳的檔案，否則使用輸入框選擇的檔案
     const spinner = document.getElementById('spinner'); // 取得加載指示器
@@ -126,14 +208,6 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
     const progressFill = document.getElementById('progressFill'); // 取得進度條填充區域
     const progressContainer = document.getElementById('uploadProgress'); // 取得進度條容器
     const progressPercent = document.getElementById('progressPercent'); // 取得進度百分比顯示區域
-
-
-
-
-
-
-
-
     // 原始權重（0.0~1.0）
     const rawWeights = {
         keyword: parseFloat(document.getElementById('weightKeyword')?.value || 0.5),
@@ -170,13 +244,37 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
         time_cluster: rawWeights.time_cluster * 10
     };
 
-
+    if (!file) {
+        alert('請選擇檔案'); // 如果沒有檔案，顯示提示訊息
+        spinner.style.display = 'none'; // 隱藏加載指示器
+        progressContainer.style.display = 'none'; // 隱藏進度條容器
+        return;
+    }
 
     if (submitBtn.disabled) {
     alert('⚠️ 權重設定不正確，請確認嚴重性與頻率加總是否為 10');
     return;
     }
 
+    const resolutionPriority = [
+    document.getElementById('resolutionField1').value,
+    document.getElementById('resolutionField2').value,
+    document.getElementById('resolutionField3').value
+    ].filter(Boolean);  // 去除空值
+
+    const summaryPriority = [
+    document.getElementById('summaryField1').value,
+    document.getElementById('summaryField2').value
+    ].filter(Boolean);
+
+    if (resolutionPriority.length === 0) {
+    alert('⚠️ 請至少選擇一個 Resolution 欄位作為分析依據');
+    return;
+    }
+    if (summaryPriority.length === 0) {
+    alert('⚠️ 請至少選擇一個 Summary 欄位作為分析依據');
+    return;
+    }
 
 
 
@@ -189,16 +287,21 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
     progressPercent.innerText = '0%'; // 重置進度百分比
     progressContainer.style.display = 'block'; // 顯示進度條容器
 
-    if (!file) {
-        alert('請選擇檔案'); // 如果沒有檔案，顯示提示訊息
-        spinner.style.display = 'none'; // 隱藏加載指示器
-        progressContainer.style.display = 'none'; // 隱藏進度條容器
-        return;
-    }
+
+
+
 
     const formData = new FormData(); // 建立表單資料物件
     formData.append('file', file); // 將檔案加入表單資料
     formData.append('weights', JSON.stringify(weights)); // 將權重物件轉為 JSON 字串並加入表單資料
+
+
+
+
+    formData.append('resolution_priority', JSON.stringify(resolutionPriority));
+    formData.append('summary_priority', JSON.stringify(summaryPriority));
+
+
     const xhr = new XMLHttpRequest(); // 建立 XMLHttpRequest 物件
     xhr.open('POST', '/upload', true); // 設定請求方法和目標 URL
     xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest'); // 設定請求標頭，表明這是 AJAX 請求
@@ -400,10 +503,106 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
         progressContainer.style.display = 'none'; // 隱藏進度條容器
         resultDiv.innerHTML = '<p style="color:red">發生錯誤，請稍後再試。</p>'; // 顯示錯誤訊息
     };
-
+    document.getElementById('previewTableArea').style.display = 'none'; // 隱藏預覽表格區域
+    document.getElementById('fieldSelectorBlock').style.display = 'none'; // 隱藏欄位選擇區域
     checkDuplicateAndUpload();  // 啟動檢查並上傳流程
 }
 );
+
+
+function previewExcel(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  fetch('/preview-excel', {
+    method: 'POST',
+    body: formData
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (data.error) {
+        alert(`❌ 預覽失敗：${data.error}`);
+        return;
+      }
+
+      renderPreviewTable(data.columns, data.rows);
+      populateFieldSelectors(data.columns);
+    })
+    .catch(err => {
+      console.error('❌ 預覽錯誤：', err);
+      alert('無法預覽檔案，請稍後再試');
+    });
+}
+
+function renderPreviewTable(columns, rows) {
+  if (!columns || !rows) return;
+  let html = '<table class="table table-bordered table-sm"><thead><tr>';
+
+  columns.forEach(col => {
+    html += `<th>${col}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+
+  rows.forEach(row => {
+    html += '<tr>';
+    columns.forEach(col => {
+      html += `<td>${row[col] || ''}</td>`;
+    });
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  previewTableWrapper.innerHTML = html;
+  document.getElementById('previewTableArea').style.display = 'block';
+}
+
+function updateFieldOptionStates() {
+  const resolutionIds = ['resolutionField1', 'resolutionField2', 'resolutionField3'];
+  const summaryIds = ['summaryField1', 'summaryField2'];
+
+  const updateGroup = (ids) => {
+    const values = ids.map(id => document.getElementById(id).value);
+    ids.forEach(id => {
+      const select = document.getElementById(id);
+      const currentValue = select.value;
+      const selectedSet = new Set(values);
+
+      Array.from(select.options).forEach(opt => {
+        if (!opt.value) return; // 跳過空白選項
+
+        const usedElsewhere = selectedSet.has(opt.value) && opt.value !== currentValue;
+        opt.disabled = usedElsewhere;
+
+        // 🔁 動態更新顯示文字（避免重複標籤）
+        const baseLabel = opt.value.replace(/\(已選取\)$/g, '').trim();
+        opt.textContent = usedElsewhere ? `${baseLabel}（已選取）` : baseLabel;
+      });
+    });
+  };
+
+  updateGroup(resolutionIds);
+  updateGroup(summaryIds);
+}
+
+
+
+function populateFieldSelectors(columns) {
+  const fieldIds = [
+    'resolutionField1', 'resolutionField2', 'resolutionField3',
+    'summaryField1', 'summaryField2'
+  ];
+  fieldIds.forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    sel.innerHTML = '<option value="">（請選擇欄位）</option>' +
+      columns.map(c => `<option value="${c}">${c}</option>`).join('');
+    sel.onchange = updateFieldOptionStates; // ✅ 加這行
+
+  });
+
+  document.getElementById('fieldSelectorBlock').style.display = 'block';
+}
+
 
 
 function addHistoryItem(uid, fileName, summaryText, analysisTime) {
@@ -550,89 +749,6 @@ window.addEventListener('DOMContentLoaded', () => {
     });
     localStorage.setItem("historyData", JSON.stringify(cleanedHistory));
 
- function updateWeightSum() {
-  const severityFields = ['weightKeyword', 'weightMultiUser', 'weightEscalation'];
-  const frequencyFields = ['weightConfigItem', 'weightRoleComponent', 'weightTimeCluster'];
-
-  let severitySum = 0;
-  let frequencySum = 0;
-
-  severityFields.forEach(id => {
-    const val = parseFloat(document.getElementById(id)?.value || '0');
-    if (!isNaN(val)) severitySum += val;
-  });
-
-  frequencyFields.forEach(id => {
-    const val = parseFloat(document.getElementById(id)?.value || '0');
-    if (!isNaN(val)) frequencySum += val;
-  });
-
-  const total = severitySum + frequencySum;
-
-  // 更新數字
-  document.getElementById('severitySum').textContent = severitySum.toFixed(2);
-  document.getElementById('frequencySum').textContent = frequencySum.toFixed(2);
-  document.getElementById('weightSum').textContent = total.toFixed(2);
-
-
-
-  // 個別錯誤標紅
-  const severityRow = document.getElementById('severitySumRow');
-  const frequencyRow = document.getElementById('frequencySumRow');
-    const totalSumRow = document.getElementById('totalSumRow'); // 👈 新增這行
-
-const severityTooMuch = severitySum > 1.001;
-const frequencyTooMuch = frequencySum > 1.001;
-const totalTooMuch = total > 2.001;
-
-
-
-// 清除原有狀態
-severityRow.classList.remove('weight-warn', 'weight-ok');
-frequencyRow.classList.remove('weight-warn', 'weight-ok');
-totalSumRow.classList.remove('weight-warn', 'weight-ok');
-
-// 僅當「超過」才給紅色，其餘顯示正常
-severityRow.classList.add(severityTooMuch ? 'weight-warn' : 'weight-ok');
-frequencyRow.classList.add(frequencyTooMuch ? 'weight-warn' : 'weight-ok');
-totalSumRow.classList.add(totalTooMuch ? 'weight-warn' : 'weight-ok');
-
-const submitBtn = document.getElementById('submitBtn');
-const allValid =
-  severitySum <= 1.001 &&
-  frequencySum <= 1.001 &&
-  total <= 2.001;
-
-
-submitBtn.disabled = !allValid;
-
-
-
-
-
-
-
-
-
-
-
-// --- 加總計算完後，檢查是否超過建議值（即時提醒） ---
-if (severitySum > 1.001) {
-  showToastMessage(`⚠️ 嚴重性權重加總已超過 1（目前為 ${severitySum.toFixed(2)}）`, 'error');
-}
-if (frequencySum > 1.001) {
-  showToastMessage(`⚠️ 頻率權重加總已超過 1（目前為 ${frequencySum.toFixed(2)}）`, 'error');
-}
-if (total > 2.001) {
-  showToastMessage(`⚠️ 總權重加總已超過 2（目前為 ${total.toFixed(2)}）`, 'error');
-}
-
-
-
-
-}
-
-
 // 初始化一次
 updateWeightSum();
 
@@ -646,9 +762,11 @@ document.getElementById('excelFile').addEventListener('change', function () {
         const info = document.getElementById('fileInfo');
         // 取得提交按鈕的 DOM 元素
         const submitBtn = document.getElementById('submitBtn'); // 👈 抓按鈕
+      
 
         // 如果有選擇檔案
         if (file) {
+            previewExcel(file)
             // 更新檔案資訊顯示區域，顯示檔案名稱
             info.innerText = `已選擇檔案：${file.name}`;
             // 啟用提交按鈕

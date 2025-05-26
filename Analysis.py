@@ -266,12 +266,13 @@ def cluster_excel_export(results, export_dir="excel_result_Clustered"):
 
 
 # 用於同步 Flask 路由呼叫 async 分析邏輯
-def analyze_excel(filepath, weights=None):
-    return asyncio.run(analyze_excel_async(filepath, weights))
+def analyze_excel(filepath, weights=None, resolution_priority=None, summary_priority=None):
+    return asyncio.run(analyze_excel_async(filepath, weights, resolution_priority, summary_priority))
+
 
 
 # 用於同步 Flask 路由呼叫 async 分析邏輯
-async def analyze_excel_async(filepath, weights=None):
+async def analyze_excel_async(filepath, weights=None, resolution_priority=None, summary_priority=None):
     start_time = time.time()
     default_weights = {
         'keyword': 5.0,
@@ -289,6 +290,34 @@ async def analyze_excel_async(filepath, weights=None):
     multi_user_examples, multi_user_embeddings = load_embeddings("multi_user")
 
     df = pd.read_excel(filepath)
+
+
+    # ✅ 欄位順位 fallback 預設
+    resolution_priority = resolution_priority or ['Description', 'Short description', 'Close notes']
+    summary_priority = summary_priority or ['Short description', 'Description']
+
+    def combine_fields_with_priority(row, field_order, limit):
+        parts = []
+        for f in field_order:
+            if f in row and pd.notna(row[f]):
+                parts.append(str(row[f]).strip())
+
+        combined = "\n".join(parts)
+        while len(combined) > limit and len(parts) > 1:
+            removed = parts.pop()
+            print(f"🔁 移除欄位：{removed[:20]}...")
+            combined = "\n".join(parts)
+
+        # 額外：印出實際使用的欄位名稱
+        used_fields = field_order[:len(parts)]
+        print(f"✅ 實際使用欄位：{used_fields}，合併長度：{len(combined)}")
+        return combined.strip()
+
+    # ✅ 產生 resolution_input / summary_input 給 GPT 用
+    df['resolution_input'] = df.apply(lambda row: combine_fields_with_priority(row, resolution_priority, 10000), axis=1)
+    df['summary_input'] = df.apply(lambda row: combine_fields_with_priority(row, summary_priority, 8000), axis=1)
+
+
     component_counts = df['Role/Component'].value_counts()
     configuration_item_counts = df['Configuration item'].value_counts()
     configuration_item_max = configuration_item_counts.max()
@@ -301,7 +330,9 @@ async def analyze_excel_async(filepath, weights=None):
             row, idx, df, weights, component_counts, configuration_item_counts, configuration_item_max, analysis_time,
             high_risk_examples, high_risk_embeddings,
             escalation_examples, escalation_embeddings,
-            multi_user_examples, multi_user_embeddings)
+            multi_user_examples, multi_user_embeddings,
+            row['resolution_input'], row['summary_input']  # ✅ 新增這兩欄
+        )
         for idx, row in df.iterrows()
     ]
     results_raw = await asyncio.gather(*tasks, return_exceptions=True)
@@ -361,7 +392,8 @@ async def analyze_excel_async(filepath, weights=None):
 async def analyze_row_async(row, idx, df, weights, component_counts, configuration_item_counts, configuration_item_max, analysis_time,     
     high_risk_examples, high_risk_embeddings,
     escalation_examples, escalation_embeddings,
-    multi_user_examples, multi_user_embeddings):
+    multi_user_examples, multi_user_embeddings,
+    resolution_text, summary_input):
     print(f"[分析 Row#{idx+1}] 本次用的高風險語句數：{len(high_risk_examples)}，倒數兩句：{high_risk_examples[-2:] if high_risk_examples else '空'}")
     print(f"[分析 Row#{idx+1}] 本次用的升級語句數：{len(escalation_examples)}，倒數兩句：{escalation_examples[-2:] if escalation_examples else '空'}")
     print(f"[分析 Row#{idx+1}] 本次用的影響多使用者語句數：{len(multi_user_examples)}，倒數兩句：{multi_user_examples[-2:] if multi_user_examples else '空'}")
@@ -381,15 +413,24 @@ async def analyze_row_async(row, idx, df, weights, component_counts, configurati
             print(f"⚠️ 第 {idx+1} 筆內容全為空白，略過分析")
             return None
 
-        resolution_text = f"{desc}\n{short_desc}\n{close_notes}".strip()
-        if len(resolution_text) > 10000:
-            print(f"🟡 [Row#{idx+1}] resolution_text > 3000，使用 short_desc + close_notes")
-            resolution_text = f"{short_desc}\n{close_notes}".strip()
-            if len(resolution_text) > 10000:
-                print(f"🔴 [Row#{idx+1}] short_desc + close_notes > 3000，只用 close_notes")
-                resolution_text = close_notes.strip()
-        else:
-            print(f"🟢 [Row#{idx+1}] resolution_text 使用 desc + short_desc + close_notes")
+        # ✅ 改用合併後欄位（已由前段 fallback 處理）
+        print(f"🧠 [Row#{idx+1}] 使用 resolution_text（長度：{len(resolution_text)}）")
+        print(f"📌 Resolution 欄位原始合併內容：\n{resolution_text[:1000]}")
+        print(f"🧠 [Row#{idx+1}] 使用 summary_input（長度：{len(summary_input)}）")
+        print(f"📌 Summary 欄位原始合併內容：\n{summary_input[:1000]}")
+
+
+
+        # resolution_text = f"{desc}\n{short_desc}\n{close_notes}".strip()
+
+        # if len(resolution_text) > 10000:
+        #     print(f"🟡 [Row#{idx+1}] resolution_text > 3000，使用 short_desc + close_notes")
+        #     resolution_text = f"{short_desc}\n{close_notes}".strip()
+        #     if len(resolution_text) > 10000:
+        #         print(f"🔴 [Row#{idx+1}] short_desc + close_notes > 3000，只用 close_notes")
+        #         resolution_text = close_notes.strip()
+        # else:
+        #     print(f"🟢 [Row#{idx+1}] resolution_text 使用 desc + short_desc + close_notes")
 
 
         keyword_score = is_high_risk(short_desc, high_risk_examples, high_risk_embeddings)
@@ -427,15 +468,15 @@ async def analyze_row_async(row, idx, df, weights, component_counts, configurati
         risk_level = get_risk_level(impact_score)
 
         # ==== 判斷 summary 輸入長度 ====
-        summary_input = f"{short_desc}\n{desc}".strip()
-        if len(summary_input) > 8000:
-            print(f"🟡 [Row#{idx+1}] summary_input > 2000，使用 short_desc + close_notes")
-            summary_input = f"{short_desc}\n{close_notes}".strip()
-            if len(summary_input) > 8000:
-                print(f"🔴 [Row#{idx+1}] short_desc + close_notes > 2000，只用 short_desc")
-                summary_input = short_desc.strip()
-        else:
-            print(f"🟢 [Row#{idx+1}] summary_input 使用 short_desc + desc")
+        # summary_input = f"{short_desc}\n{desc}".strip()
+        # if len(summary_input) > 8000:
+        #     print(f"🟡 [Row#{idx+1}] summary_input > 2000，使用 short_desc + close_notes")
+        #     summary_input = f"{short_desc}\n{close_notes}".strip()
+        #     if len(summary_input) > 8000:
+        #         print(f"🔴 [Row#{idx+1}] short_desc + close_notes > 2000，只用 short_desc")
+        #         summary_input = short_desc.strip()
+        # else:
+        #     print(f"🟢 [Row#{idx+1}] summary_input 使用 short_desc + desc")
 
 
 
@@ -473,6 +514,9 @@ async def analyze_row_async(row, idx, df, weights, component_counts, configurati
             'location': safe_value(row.get('Location')),
             'analysisTime': analysis_time,
             'weights': {k: round(v / 10, 2) for k, v in weights.items()},
+            'usedResolutionInput': safe_value(resolution_text),
+            'usedSummaryInput': safe_value(summary_input),
+
         }
 
     except Exception as e:
@@ -938,6 +982,22 @@ def gpt_prompt_page():
 # ------------------------------------------------------------------------------
 
 
+@app.route('/preview-excel', methods=['POST'])
+def preview_excel():
+    file = request.files.get('file')
+    if not file:
+        return jsonify({'error': '未提供檔案'})
+
+    try:
+        df = pd.read_excel(file)
+        columns = df.columns.tolist()
+        rows = df.head(50).fillna('').astype(str).to_dict(orient='records')  # 預覽前 50 筆資料
+        return jsonify({'columns': columns, 'rows': rows})
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
+
 
 
 @app.route('/ping')
@@ -945,12 +1005,9 @@ def ping():
     return "pong", 200
 
 
-# 定義檔案上傳路由
 @app.route('/upload', methods=['POST'])
 def upload_file():
     print("📥 收到上傳請求")  # 紀錄請求
-
-
 
     if 'file' not in request.files:  # 檢查是否有檔案欄位
         print("❌ 沒有 file 欄位")
@@ -964,12 +1021,9 @@ def upload_file():
     if not allowed_file(file.filename):  # 檢查檔案格式是否允許
         print("⚠️ 檔案類型不符")
         return jsonify({'error': '請上傳 .xlsx 檔案'}), 400
-        
-    # 接收自訂權重
-    weights_raw = request.form.get('weights')
-    if not weights_raw:
-        print("ℹ️ 未提供自訂權重，使用預設值分析")
 
+    # ✅ 接收自訂權重
+    weights_raw = request.form.get('weights')
     weights = None
     if weights_raw:
         try:
@@ -978,40 +1032,50 @@ def upload_file():
         except Exception as e:
             print(f"⚠️ 權重解析失敗：{e}")
             return jsonify({'error': '權重解析失敗'}), 400
-        
+    else:
+        print("ℹ️ 未提供自訂權重，使用預設值分析")
+
+    # ✅ 接收 Resolution / Summary 欄位順位
+    try:
+        resolution_priority = json.loads(request.form.get('resolution_priority', '[]'))
+        summary_priority = json.loads(request.form.get('summary_priority', '[]'))
+        print("📌 Resolution 順位欄位：", resolution_priority)
+        print("📌 Summary 順位欄位：", summary_priority)
+    except Exception as e:
+        print(f"⚠️ 欄位順位解析失敗：{e}")
+        return jsonify({'error': '欄位順位解析失敗'}), 400
+
     # 產生時間戳記與檔名
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    uid = f"result_{timestamp}" # 例如 result_20250423_152301 分析結果檔名稱
-    original_filename = f"original_{timestamp}.xlsx" # 例如 original_20250423_152301.xlsx 原始黨名稱
+    uid = f"result_{timestamp}"
+    original_filename = f"original_{timestamp}.xlsx"
     original_path = os.path.join('uploads', original_filename)
 
-
-
     try:
-        file.save(original_path)  # 儲存原始檔案
-        print(f" 原始檔已儲存：{original_path}")
+        file.save(original_path)
+        print(f"📁 原始檔已儲存：{original_path}")
     except Exception as e:
         return jsonify({'error': f'儲存原始檔失敗：{str(e)}'}), 500
 
     try:
-        analysis_result = analyze_excel(original_path, weights=weights)
-        results = analysis_result['data']  # 取得分析結果
-
-
-        save_analysis_files(analysis_result, uid)  # 儲存分析結果檔案
-
+        # ✅ 呼叫分析（新增傳入 resolution_priority 與 summary_priority）
+        analysis_result = analyze_excel(
+            original_path,
+            weights=weights,
+            resolution_priority=resolution_priority,
+            summary_priority=summary_priority
+        )
+        results = analysis_result['data']
+        save_analysis_files(analysis_result, uid)
         print(f"✅ 分析完成，共 {len(results)} 筆")
-        session['analysis_data'] = results  # 儲存分析結果到 session
+        session['analysis_data'] = results
         return jsonify({'data': results, 'uid': uid, 'weights': weights}), 200
-
-
-    
-
 
     except Exception as e:
         print(f"❌ 分析時發生錯誤：{e}")
-        traceback.print_exc()  # 印出完整錯誤堆疊
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
     
 def save_analysis_files(result, uid):
     os.makedirs('json_data', exist_ok=True)

@@ -943,6 +943,22 @@ body.dark-mode .weight-ok {
 }
 
 
+/* 📋 Excel 預覽表格容器（限制高度 + 捲軸） */
+#previewTableWrapper {
+  max-height: 420px;         /* 顯示約兩筆資料 */
+  overflow-y: auto;
+  overflow-x: auto;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 4px;
+  background-color: #fff;
+}
+
+/* ✅ 深色模式配色 */
+body.dark-mode #previewTableWrapper {
+  background-color: #2a2d4a;
+  border-color: #555;
+}
 
 
 
