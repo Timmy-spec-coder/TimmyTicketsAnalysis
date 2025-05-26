@@ -142,12 +142,23 @@ scrollToBottom();
   }
 });
 
-
-// 🔁 顯示歷史紀錄按鈕
 document.getElementById("showHistoryBtn").addEventListener("click", async () => {
   const listUI = document.getElementById("historyListUI");
   const wrapper = document.getElementById("chatHistoryList");
-  wrapper.style.display = wrapper.style.display === "none" ? "block" : "none";
+  const btn = document.getElementById("showHistoryBtn");
+
+  const isVisible = wrapper.style.display !== "none";
+  if (isVisible) {
+    wrapper.style.display = "none";
+    listUI.innerHTML = ""; // ✅ 收合時清空列表內容
+    btn.innerText = "📂 展開完整歷史";
+    return;
+  } else {
+    wrapper.style.display = "block";
+    btn.innerText = "📂 收合歷史";
+  }
+
+  // 🔄 載入中...
   listUI.innerHTML = `<li class="list-group-item">🔄 載入中...</li>`;
 
   try {
@@ -168,36 +179,40 @@ document.getElementById("showHistoryBtn").addEventListener("click", async () => 
         <button class="btn btn-sm btn-outline-primary">載入</button>
       `;
 
+      li.querySelector("button").onclick = async () => {
+        const res = await fetch(`/chat-history/${item.id}`);
+        const json = await res.json();
+        chatHistory = json.history || [];
+        localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
 
-li.querySelector("button").onclick = async () => {
-  const res = await fetch(`/chat-history/${item.id}`);
-  const json = await res.json();
-  chatHistory = json.history || [];
-  localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
+        // ✅ 標記 active
+        document.querySelectorAll('#historyListUI .list-group-item').forEach(el => el.classList.remove('active'));
+        li.classList.add('active');
 
-  // ✅ 清除其他 active，再標記目前這筆
-  document.querySelectorAll('#historyListUI .list-group-item').forEach(el => {
-    el.classList.remove('active');
-  });
-  li.classList.add('active');
-
-  // ✅ 渲染訊息
-  const box = document.getElementById("chatBox");
-  box.innerHTML = "";
-  chatHistory.forEach(entry => {
-    const div = document.createElement("div");
-    div.className = "msg " + (entry.role === "user" ? "user" : "bot");
-    div.innerHTML = `${entry.role === "user" ? "👤" : "🤖"} ${renderMessage(entry.content)}`;
-    box.appendChild(div);
-  });
-scrollToBottom();
-};
+        // ✅ 顯示訊息
+        const box = document.getElementById("chatBox");
+        box.innerHTML = "";
+        chatHistory.forEach(entry => {
+          const div = document.createElement("div");
+          div.className = "msg " + (entry.role === "user" ? "user" : "bot");
+          div.innerHTML = `${entry.role === "user" ? "👤" : "🤖"} ${renderMessage(entry.content)}`;
+          box.appendChild(div);
+        });
+        scrollToBottom();
+      };
       listUI.appendChild(li);
     });
   } catch (err) {
     listUI.innerHTML = `<li class="list-group-item text-danger">❌ 載入失敗</li>`;
     console.error(err);
   }
+
+  
+});
+
+// ✅ 頁面一載入就自動展開歷史並載入清單
+window.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("showHistoryBtn").click();
 });
 
 // 🧹 清空聊天

@@ -16,6 +16,9 @@ body {
 }
 
 #chatBox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   background-color: #f9f9fc;
   color: #222;
   padding: 20px;
@@ -61,7 +64,10 @@ body {
 }
 
 .msg {
+  display: inline-block;
+    margin-bottom: 10px;
   max-width: 80%;
+  width: fit-content;
   padding: 14px 18px;
   margin: 10px 0;
   border-radius: 16px;
@@ -70,13 +76,17 @@ body {
   white-space: pre-wrap;
   position: relative;
   box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    word-wrap: break-word;
+    align-self: flex-start;   /* 預設左對齊 */
 }
 
 .msg.user {
+    align-self: flex-end;
   text-align: right;
   color: #1e88e5;
 }
 .msg.bot {
+    align-self: flex-start;
   text-align: left;
   color: #6a1b9a;
 }

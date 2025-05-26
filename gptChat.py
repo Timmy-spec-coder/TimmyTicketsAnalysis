@@ -27,16 +27,27 @@ def search_knowledge_base(query, top_k=3):
         return []
     query_vec = kb_model.encode([query])
     D, I = kb_index.search(np.array(query_vec), top_k)
+    print(f"[RAG] 🔍 查詢: {query}")
+    print(f"[RAG] 🧠 取出知識庫資料：{[kb_texts[i][:50] for i in I[0]]}")
+
     return [kb_texts[i] for i in I[0]]
 
 # ----------- GPT 主函式 -----------
-
 def run_offline_gpt(message, model="mistral", history=[]):
     """
     使用 Ollama 執行本地 GPT 模型推論，支援知識庫檢索（RAG）與上下文。
     """
+
     # 🔍 Step 1: 檢索知識庫
     retrieved = search_knowledge_base(message, top_k=3)
+    if retrieved:
+        print(f"\n[RAG] ✅ 啟用知識庫輔助，共取出 {len(retrieved)} 筆：")
+        for i, chunk in enumerate(retrieved, 1):
+            preview = chunk.replace('\n', ' ')[:100]
+            print(f"    {i}. {preview}...")
+    else:
+        print("\n[RAG] ⚠️ 未使用知識庫（未找到相似資料）")
+
     kb_context = "\n".join([f"🔍相關資料：{chunk}" for chunk in retrieved]) if retrieved else ""
 
     # 🔁 組合歷史對話（最多取 5 筆）
@@ -49,8 +60,8 @@ def run_offline_gpt(message, model="mistral", history=[]):
     prompt = f"{kb_context}\n\n{context}User: {message}\nAssistant:"
 
     # ✅ DEBUG
-    print("🔧 使用模型：", model)
-    print("📤 傳送 prompt：\n", prompt)
+    print("\n[Prompt Preview] 🧾 發送給模型的 Prompt 前 300 字：")
+    print(prompt[:300])
 
     try:
         # 🛠 呼叫 Ollama CLI
@@ -66,7 +77,7 @@ def run_offline_gpt(message, model="mistral", history=[]):
             return f"⚠️ Ollama 錯誤：{result.stderr.decode('utf-8')}"
 
         reply = result.stdout.decode("utf-8").strip()
-        print("📥 模型回覆：", reply)
+        print("\n📥 模型回覆：", reply)
         return reply if reply else "⚠️ 沒有收到模型回應。"
 
     except Exception as e:
