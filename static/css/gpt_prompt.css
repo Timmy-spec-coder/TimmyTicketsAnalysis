@@ -398,6 +398,8 @@ body.dark-mode .gpt-textarea::placeholder {
   font-weight: 700;
 }
 
+
+
 .bg-yellow .fa-lightbulb {
   color: #fff000;
 }
@@ -446,3 +448,13 @@ body.dark-mode .dash-meta-value {
   background: #142e2d;
   color: #45fba3;
 }
+
+.dash-prompt-text summary {
+  cursor: pointer;
+  font-weight: bold;
+  color: #444;
+}
+body.dark-mode .dash-prompt-text summary {
+  color: #ccc;
+}
+

@@ -169,15 +169,23 @@ async function loadMappingArea() {
   let mapping = await fetch('/get-gpt-prompt-map').then(r => r.json());
 
   // Solution 下拉：所有 solution prompts
-  let solOptions = (promptData.solution?.prompts || []).map((p, idx) =>
-    `<option value="solution|${idx}">${p.length > 30 ? p.slice(0, 30) + "..." : p}</option>`
-  ).join("");
-  selectSolution.innerHTML = solOptions;
-  // Summary 下拉
-  let sumOptions = (promptData.ai_summary?.prompts || []).map((p, idx) =>
-    `<option value="ai_summary|${idx}">${p.length > 30 ? p.slice(0, 30) + "..." : p}</option>`
-  ).join("");
-  selectSummary.innerHTML = sumOptions;
+// Solution 下拉：超過 600 字才顯示...，否則原文
+let solOptions = (promptData.solution?.prompts || []).map((p, idx) =>
+  `<option value="solution|${idx}" title="${p}">${
+    p.length > 210 ? p.slice(0, 210) + "..." : p
+  }</option>`
+).join("");
+selectSolution.innerHTML = solOptions;
+
+let sumOptions = (promptData.ai_summary?.prompts || []).map((p, idx) =>
+  `<option value="ai_summary|${idx}" title="${p}">${
+    p.length > 210 ? p.slice(0, 210) + "..." : p
+  }</option>`
+).join("");
+selectSummary.innerHTML = sumOptions;
+
+
+
 
   // mapping 裡記錄了目前選的用途和 index
   if (mapping.solution?.prompt) {
