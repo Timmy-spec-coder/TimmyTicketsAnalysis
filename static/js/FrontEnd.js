@@ -277,6 +277,7 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
                     <th>Frequency<br><small>(0–1)</small></th>
                     <th>Impact<br><small>(0–1)</small></th>
                     <th>Risk Level</th>
+                    <th>Issue Summary</th>      <!-- 🟢 新增 -->
                     <th>Solution</th>
                     <th>Location</th>
                     </tr>
@@ -290,6 +291,7 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
                         <td>${(item.frequencyScore / 20).toFixed(2)}</td>
                         <td>${(item.impactScore / 30).toFixed(2)}</td>
                         <td><span class="badge ${item.riskLevel}">${item.riskLevel}</span></td>
+                        <td>${item.aiSummary || '—'}</td>   <!-- 🟢 新增 -->
                         <td>${item.solution || '—'}</td>
                         <td>${item.location || '—'}</td>
                         </tr>
@@ -341,8 +343,8 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
                                     <td>${(item.severityScore / 10).toFixed(2)}</td>
                                     <td>${(item.frequencyScore / 20).toFixed(2)}</td>
                                     <td>${(item.impactScore / 30).toFixed(2)}</td>
-
                                     <td><span class="badge ${item.riskLevel}">${item.riskLevel}</span></td>
+                                    <td>${item.aiSummary || '—'}</td>   <!-- 🟢 新增 -->
                                     <td>${item.solution || '—'}</td>
                                     <td>${item.location || '—'}</td>
                                     </tr>

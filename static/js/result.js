@@ -163,19 +163,28 @@ infoCard.innerHTML = `
 
 
 
-
-
-
-
-
-        <div><strong>Risk Level:</strong>
+        <div><strong>Issue Summary:</strong> <span>${row.aiSummary || '—'}</span></div> <!-- 👈 新增這行 -->
+        <div><strong>Solution:</strong> <span>${row.solution || '—'}</span></div>
+                <div><strong>Risk Level:</strong>
             <span class="badge ${riskLevelToClass(row.riskLevel)}">${row.riskLevel}</span></div>
 
-        <div><strong>Solution:</strong> <span>${row.solution || '—'}</span></div>
+<div style="display: flex; align-items: center; gap: 20px; margin-top: 6px;">
+  <span style="background: #e3f2fd; color: #1565c0; border-radius: 7px; padding: 3px 12px; font-size: 1rem; display: flex; align-items: center;">
+    <i class="fas fa-map-marker-alt" style="margin-right: 5px;"></i>
+    ${row.location || '—'}
+  </span>
+  <span style="background: #fff8e1; color: #b26a00; border-radius: 7px; padding: 3px 12px; font-size: 1rem; display: flex; align-items: center;">
+    <i class="fas fa-calendar-alt" style="margin-right: 5px;"></i>
+    ${row.analysisTime || '—'}
+  </span>
+</div>
 
-        <div><strong>Location:</strong> <span>${row.location || '—'}</span></div>
 
-        <div><strong>Analysis Date:</strong> <span>${row.analysisTime || '—'}</span></div>
+
+
+
+
+
 
     </div>
 
