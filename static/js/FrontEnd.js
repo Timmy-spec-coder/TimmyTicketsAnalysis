@@ -191,6 +191,7 @@ toast.innerHTML = `
 document.getElementById('uploadForm').addEventListener('submit', function(e) {
     e.preventDefault(); // 阻止表單的預設提交行為（避免整頁刷新）
 
+    window.kbLocked = true;   // ✅ 一送出就鎖定
 
     
 
@@ -808,7 +809,7 @@ function navigateTo(id) {
 // 導航到不同的頁面，若知識庫建立中則中止跳轉
 function navigateTo1(page) {
   if (window.kbLocked) {
-    alert("⚠️ 知識庫建立中，請稍候完成後再切換頁面！");
+    alert("⚠️ 正在建置知識庫，請稍候完成後再切換頁面！");
     return;
   }
 
@@ -824,6 +825,7 @@ function navigateTo1(page) {
 
   window.location.href = paths[page] || "/";
 }
+
 
 //------------------------------------------------------------------------------------
 
