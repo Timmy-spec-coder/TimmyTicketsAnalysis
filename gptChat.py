@@ -295,28 +295,59 @@ def analyze_temporal_trend(message):
     return f"<img src='data:image/png;base64,{img_base64}' alt='Trend chart'>"
 
 
-# 存入記憶（以最後一個 query 為基礎）
+
+
+# ----------- 儲存查詢上下文 -----------
 def save_query_context(chat_id, query, result_type, filter_info=None, result_summary=None):
     filepath = f"chat_history/{chat_id}.json"
+
+    # 嘗試讀取對話歷史
     try:
         with open(filepath, encoding="utf-8") as f:
             history = json.load(f)
-    except:
+        if not isinstance(history, list):
+            print("⚠️ 記錄格式錯誤（非 list），重新初始化歷史")
+            history = []
+    except Exception as e:
+        print(f"⚠️ 無法讀取歷史，初始化為空：{e}")
         history = []
 
-    # 🔁 更新最新記憶
+    # 準備 context 內容
     context = {
         "type": result_type,
         "query": query,
-        "filters": filter_info,          # e.g. {"field": "subcategory", "value": "Crash/Hang"}
-        "summary": result_summary        # 可選：簡化摘要
+        "filters": filter_info,
+        "summary": result_summary
     }
 
-    if history:
+    # 若無歷史，建立佔位對話
+    if not history:
+        print("🧠 尚無對話歷史，自動新增一則佔位訊息並附加 context。")
+        history.append({
+            "role": "user",
+            "content": query,
+            "context": context  # 直接寫入 context
+        })
+    else:
         history[-1]["context"] = context
+        print("🧠 已更新最後一則對話的 context。")
 
-    with open(filepath, "w", encoding="utf-8") as f:
-        json.dump(history, f, ensure_ascii=False, indent=2)
+    print(f"💾 儲存記憶內容：{context}")
+
+    # 儲存回 JSON 檔案
+    try:
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+        print(f"✅ 已寫入 chat_history/{chat_id}.json")
+    except Exception as e:
+        print(f"❌ 儲存記憶失敗：{e}")
+
+
+
+
+
+
+
 
 
 
@@ -443,12 +474,19 @@ def run_offline_gpt(message, model="mistral", history=[], chat_id=None):
     if query_type == "Field Filter":
         print("🔄 類型為欄位過濾，開始進行過濾...")
         reply = analyze_field_query(message)
-        try:
-            parsed = json.loads(reply)
-            filters = {"field": parsed.get("field"), "value": parsed.get("value")}
-        except:
-            filters = None
-        save_query_context(chat_id, message, query_type, filter_info=filters, result_summary=reply[:200])
+
+        # ✅ 改用純文字解析條件（避免 json.loads 錯誤）
+        filters = []
+        for line in reply.splitlines():
+            if line.strip().startswith("• "):
+                try:
+                    field_part = line.replace("•", "").strip()
+                    field, value = field_part.split("=", 1)
+                    filters.append({"field": field.strip(), "value": value.strip()})
+                except:
+                    continue
+
+        save_query_context(chat_id, message, query_type, filter_info=filters if filters else None, result_summary=reply[:200])
         return reply
 
     if query_type == "Field Values":
