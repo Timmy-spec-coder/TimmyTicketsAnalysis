@@ -69,16 +69,34 @@
 
   <!-- 主畫面兩欄 -->
   <div class="container-fluid d-flex" style="height: 100vh; padding-left: 240px;">
+
+
+
+
+
     <!-- 左欄：歷史紀錄 -->
 <div id="chatHistorySidebar" class="p-3" style="width: 260px; overflow-y: auto;">
-      <h5 class="mb-3">📚 歷史對話</h5>
-            <div class="input-group mb-3">
-        <span class="input-group-text">🔍 搜尋</span>
-        <input type="text" class="form-control" placeholder="輸入關鍵字篩選話題" id="historySearchInput">
-      </div>
+  <h5 class="mb-3">📚 歷史對話</h5>
 
-      <ul id="historyListUI" class="list-group list-group-flush"></ul>
-    </div>
+  <!-- 搜尋框 -->
+  <div class="search-wrapper mb-3">
+    <input
+      type="text"
+      id="historySearchInput"
+      class="form-control styled-search"
+      placeholder="🔍 搜尋歷史話題..."
+    />
+  </div>
+
+  <!-- 歷史清單 -->
+  <ul id="historyListUI" class="list-group list-group-flush"></ul>
+</div>
+
+
+
+
+
+
 
     <!-- 右欄：聊天主區 -->
     <div class="flex-grow-1 p-4 d-flex flex-column">
