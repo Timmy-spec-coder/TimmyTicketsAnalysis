@@ -160,13 +160,42 @@ scrollToBottom();
     typingIndicator.remove();
 
     const reply = data.reply || data.error || "⚠️ 回應失敗";
-    chatHistory.push({ role: "assistant", content: reply });
+
+
+
+
+
 
     const botMsg = document.createElement("div");
     botMsg.className = "msg bot";
-    botMsg.innerHTML = `🤖 ${renderMessage(reply)}<span class="timestamp">${timestamp}</span>`;
+    botMsg.innerHTML = `🤖 <span id="typingContent"></span><span class="timestamp">${timestamp}</span>`;
     box.appendChild(botMsg);
-scrollToBottom();
+
+    const contentSpan = botMsg.querySelector("#typingContent");
+    const finalReply = renderMessage(reply);  // 支援換行與程式碼區塊等
+    const finalChars = Array.from(finalReply); // 防止破壞 HTML 結構（支援 emoji、中文、特殊字）
+
+    let i = 0;
+
+
+    const typingInterval = setInterval(() => {
+      if (i >= finalChars.length) {
+        clearInterval(typingInterval);
+
+        // ✅ 打字完畢才真正加入 assistant 回覆到 chatHistory
+        const assistantReply = { role: "assistant", content: reply };
+        chatHistory.push(assistantReply);
+        localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
+
+        scrollToBottom();
+        return;
+      }
+
+      contentSpan.innerHTML += finalChars[i++];
+      scrollToBottom();
+    }, 20);
+
+
 
     localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
 
