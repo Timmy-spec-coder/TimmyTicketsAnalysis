@@ -473,6 +473,10 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
             // 顯示分析完成提示
             const analysisTime = data.data[0]?.analysisTime || '未知時間';
             addHistoryItem(data.uid, file.name, summaryBox.innerText, analysisTime);
+                // ✅ 清除檔案資訊
+            document.getElementById('excelFile').value = "";
+            droppedFile = null;
+            document.getElementById('fileInfo').innerText = ""; // 清空檔案資訊顯示
         } 
         else 
         {
