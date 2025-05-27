@@ -90,6 +90,9 @@ chatInput.addEventListener("keydown", (e) => {
   scrollToBottom();
 });
 
+
+
+
 document.getElementById("chatForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const input = document.getElementById("chatInput");
@@ -166,6 +169,17 @@ scrollToBottom();
 scrollToBottom();
 
     localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
+
+// ✅ 強制刷新側邊欄（如果歷史區塊是開的）
+const showBtn = document.getElementById("showHistoryBtn");
+const historyWrapper = document.getElementById("chatHistoryList");
+
+if (showBtn && historyWrapper && historyWrapper.style.display !== "none") {
+  showBtn.click(); // 關閉
+  setTimeout(() => showBtn.click(), 200); // 展開刷新
+}
+
+
   } catch (err) {
     typingIndicator.remove();
     const errorMsg = document.createElement("div");
