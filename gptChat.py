@@ -95,7 +95,24 @@ def classify_query_type(message):
         )
         reply = result.stdout.decode("utf-8").strip()
         print(f"[分類判斷] 📥 回覆：{reply}")
-        return reply
+
+        # ✅ 關鍵字容錯判斷（可接收 GPT 輸出非標準格式）
+        if "Semantic Query" in reply:
+            return "Semantic Query"
+        if "Statistical Analysis" in reply:
+            return "Statistical Analysis"
+        if "Field Filter" in reply:
+            return "Field Filter"
+        if "Field Values" in reply:
+            return "Field Values"
+        if "Temporal Trend" in reply:
+            return "Temporal Trend"
+        if "Solution Summary" in reply:
+            return "Solution Summary"
+
+        print("⚠️ 無法解析類型，預設為 Semantic Query")
+        return "Semantic Query"
+
     except Exception as e:
         print(f"⚠️ 分類判斷失敗：{str(e)}")
         return "Semantic Query"
@@ -539,7 +556,7 @@ def run_offline_gpt(message, model="mistral", history=[], chat_id=None):
             ["ollama", "run", model],
             input=prompt.encode("utf-8"),
             capture_output=True,
-            timeout=60
+            timeout=600
         )
 
         if result.returncode != 0:
