@@ -807,23 +807,24 @@ function navigateTo(id) {
 // 導航到不同的頁面
 // 導航到不同的頁面，若知識庫建立中則中止跳轉
 function navigateTo1(page) {
-    if (window.kbBuilding) {
-        alert("⚠️ 知識庫建立中，請稍候完成後再切換頁面！");
-        return; // 中止導頁
-    }
+  if (window.kbLocked) {
+    alert("⚠️ 知識庫建立中，請稍候完成後再切換頁面！");
+    return;
+  }
 
-    const paths = {
-        upload: "/",
-        result: "/result",
-        history: "/history",
-        cluster: "/generate_cluster",
-        manual: "/manual_input",
-        gpt_prompt: "/gpt_prompt",
-        chat: "/chat_ui"
-    };
+  const paths = {
+    upload: "/",
+    result: "/result",
+    history: "/history",
+    cluster: "/generate_cluster",
+    manual: "/manual_input",
+    gpt_prompt: "/gpt_prompt",
+    chat: "/chat_ui"
+  };
 
-    window.location.href = paths[page] || "/";
+  window.location.href = paths[page] || "/";
 }
+
 //------------------------------------------------------------------------------------
 
 function showToast() {
@@ -842,8 +843,7 @@ function hideToast() {
 let kbPolling = null;
 let lastKbStatus = null; // 全域
 let kbAnalysisTriggered = false;  // ✅ 分析是否真的啟動（新增這行）
-
-
+window.kbLocked = false;  // 全域變數，true 時禁止跳頁
 
 
 
@@ -851,12 +851,11 @@ function showKbStatusBar() {
   const bar = document.getElementById("kbStatusBar");
   if (bar) bar.style.display = "block";
 
-  // ❌ 已移除跳頁警告
-
   const submitBtn = document.getElementById("submitBtn");
   if (submitBtn) submitBtn.disabled = true;
-}
 
+  window.kbLocked = true;  // 🔒 鎖住跳頁
+}
 
 function hideKbStatusBar() {
   const bar = document.getElementById("kbStatusBar");
@@ -864,7 +863,10 @@ function hideKbStatusBar() {
 
   const submitBtn = document.getElementById("submitBtn");
   if (submitBtn) submitBtn.disabled = false;
+
+  window.kbLocked = false; // 🔓 解鎖跳頁
 }
+
 
 function pollKbStatus() {
   if (!kbAnalysisTriggered) {
@@ -895,7 +897,7 @@ function pollKbStatus() {
       }
     } else {
       if (wasBuilding && !window.kbToastShown) {
-      showToastMessage("✅ 知識庫已建立完成！", "success");
+        showToastMessage("✅ 知識庫已建立完成！", "success");
         const modal = new bootstrap.Modal(document.getElementById('kbFinishedModal'));
         modal.show();
         hideKbStatusBar();
