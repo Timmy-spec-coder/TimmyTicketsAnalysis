@@ -996,29 +996,89 @@ def helpdesk_ui():
 def chat_with_model():
     data = request.get_json()
     message = data.get("message", "")
-    model = data.get("model", "mistral")  # 預設使用 mistral
+    model = data.get("model", "mistral")
     history = data.get("history", [])
+    chat_id = data.get("chatId", "")  # ✅ 前端傳入的唯一 ID
+
+    if not chat_id:
+        return jsonify({"error": "Missing chatId"}), 400
+
+    # 建立資料夾與檔案路徑
+    os.makedirs("chat_history", exist_ok=True)
+    file_path = os.path.join("chat_history", f"{chat_id}.json")
 
     try:
-        # ❗這裡呼叫你自己處理模型回應的函式，例如：
+        # ✅ 呼叫 GPT 模型處理（你的核心邏輯）
         reply = run_offline_gpt(message, model=model, history=history)
 
-        # ✅ 儲存歷史（寫入 JSON 檔）
-        uid = hashlib.md5((message + model).encode()).hexdigest()[:10]
-        history_record = {
-            "id": uid,
-            "timestamp": datetime.now().isoformat(),
-            "model": model,
-            "history": history + [{"role": "user", "content": message}, {"role": "assistant", "content": reply}]
-        }
-        os.makedirs("chat_history", exist_ok=True)
-        with open(f"chat_history/{uid}.json", "w", encoding="utf-8") as f:
-            json.dump(history_record, f, ensure_ascii=False, indent=2)
+        # ✅ 判斷是新話題還是繼續聊
+        if not os.path.exists(file_path):
+            # 🆕 首次建立新檔案
+            chat_record = {
+                "id": chat_id,
+                "title": chat_id,     # 固定為檔名
+                "edit_title": "",     # 預設空
+                "model": model,
+                "timestamp": datetime.now().isoformat(),
+                "history": history + [
+                    {"role": "user", "content": message},
+                    {"role": "assistant", "content": reply}
+                ]
+            }
+        else:
+            # 🔁 載入原檔案並追加
+            with open(file_path, "r", encoding="utf-8") as f:
+                chat_record = json.load(f)
 
-        return jsonify({"reply": reply, "id": uid})
+            chat_record["history"].append({"role": "user", "content": message})
+            chat_record["history"].append({"role": "assistant", "content": reply})
+
+        # ✅ 寫回檔案
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(chat_record, f, ensure_ascii=False, indent=2)
+
+        return jsonify({"reply": reply})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+    
+
+@app.route("/rename-chat", methods=["POST"])
+def rename_chat():
+    data = request.get_json()
+    chat_id = data.get("chatId")
+    new_title = data.get("newTitle")
+
+    if not chat_id or new_title is None:
+        return jsonify({"error": "缺少參數"}), 400
+
+    file_path = Path(f"chat_history/{chat_id}.json")
+    if not file_path.exists():
+        return jsonify({"error": "找不到檔案"}), 404
+
+    try:
+        with open(file_path, encoding="utf-8") as f:
+            record = json.load(f)
+        record["edit_title"] = new_title  # ✅ 寫入新標題
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(record, f, ensure_ascii=False, indent=2)
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+
+@app.route("/delete-chat/<chat_id>", methods=["DELETE"])
+def delete_chat(chat_id):
+    file_path = Path(f"chat_history/{chat_id}.json")
+    if file_path.exists():
+        try:
+            file_path.unlink()  # 刪除檔案
+            return jsonify({"success": True})
+        except Exception as e:
+            return jsonify({"error": f"無法刪除：{e}"}), 500
+    return jsonify({"error": "檔案不存在"}), 404
+
 
 
 @app.route("/chat-history-list")
@@ -1034,6 +1094,7 @@ def get_chat_history_list():
                 obj = json.load(f)
                 records.append({
                     "id": obj.get("id"),
+                    "title": obj.get("edit_title") or obj.get("title"),
                     "timestamp": obj.get("timestamp"),
                     "model": obj.get("model")
                 })
