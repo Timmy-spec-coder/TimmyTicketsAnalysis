@@ -81,7 +81,8 @@ def classify_query_type(message):
         "3. Field Filter (user asks to find cases matching a specific field=value)\n"
         "4. Field Values (user wants to know all possible values of a specific field)\n"
         "5. Temporal Trend (user asks about changes over time, trends, or patterns over a date range)\n"
-        "Please respond with one of: 'Semantic Query', 'Statistical Analysis', 'Field Filter', 'Field Values', 'Temporal Trend'."
+        "6. Solution Summary (user wants a list or summary of known fixes/remedies/resolutions)\n"
+        "Please respond with one of: 'Semantic Query', 'Statistical Analysis', 'Field Filter', 'Field Values', 'Temporal Trend', 'Solution Summary'."
     )
     prompt = f"{system_prompt}\n\nUser: {message}"
 
@@ -98,6 +99,7 @@ def classify_query_type(message):
     except Exception as e:
         print(f"⚠️ 分類判斷失敗：{str(e)}")
         return "Semantic Query"
+
 
 
 
@@ -377,6 +379,49 @@ def handle_follow_up(chat_id, message):
     return "⚠️ 目前只支援欄位篩選的延伸查詢。"
 
 
+def summarize_solutions(message):
+    try:
+        with open("kb_metadata.json", encoding="utf-8") as f:
+            metadata = json.load(f)
+    except Exception as e:
+        return f"⚠️ Failed to load metadata: {str(e)}"
+
+    # 搜尋語意相似的案例
+    related_cases = search_knowledge_base(message, top_k=5)
+    if not related_cases:
+        return "⚠️ No similar cases found to extract solutions."
+
+    # 將所有 solution 萃取出來組合
+    solutions = []
+    for item in metadata:
+        text = item.get("text", "")
+        if any(snippet in text for snippet in related_cases):
+            solution = item.get("solution", "")
+            if solution: solutions.append(solution)
+
+    if not solutions:
+        return "⚠️ No resolution data found for related cases."
+
+    # 使用 GPT 進行統整
+    prompt = "Please summarize the following resolution steps into a brief, clear list:\n\n"
+    prompt += "\n---\n".join(solutions[:10])
+    prompt += "\n\nSummary:"
+
+    try:
+        result = subprocess.run(
+            ["ollama", "run", "phi4"],
+            input=prompt.encode("utf-8"),
+            capture_output=True,
+            timeout=60
+        )
+        return result.stdout.decode("utf-8").strip()
+
+    except Exception as e:
+        return f"⚠️ Failed to summarize solutions: {str(e)}"
+
+
+
+
 
 
 # ----------- GPT 主函式 -----------
@@ -417,6 +462,14 @@ def run_offline_gpt(message, model="mistral", history=[], chat_id=None):
         reply = analyze_temporal_trend(message)
         save_query_context(chat_id, message, query_type, result_summary=reply[:200])
         return reply
+    
+    if query_type == "Solution Summary":
+        print("🛠 類型為解法統整，開始彙整處理方式...")
+        reply = summarize_solutions(message)
+        save_query_context(chat_id, message, query_type, result_summary=reply[:200])
+        return reply
+
+
 
     print("🔄 類型為語意查詢，開始檢索知識庫...")
     retrieved = search_knowledge_base(message, top_k=3)
