@@ -5,6 +5,11 @@ import faiss
 import json
 import numpy as np
 from sentence_transformers import SentenceTransformer
+import pandas as pd
+import matplotlib.pyplot as plt
+import io
+import base64
+
 
 # ----------- 知識庫向量載入與檢索 -----------
 
@@ -75,7 +80,8 @@ def classify_query_type(message):
         "2. Statistical Analysis (user wants counts or summaries)\n"
         "3. Field Filter (user asks to find cases matching a specific field=value)\n"
         "4. Field Values (user wants to know all possible values of a specific field)\n"
-        "Please respond with one of: 'Semantic Query', 'Statistical Analysis', 'Field Filter', 'Field Values'."
+        "5. Temporal Trend (user asks about changes over time, trends, or patterns over a date range)\n"
+        "Please respond with one of: 'Semantic Query', 'Statistical Analysis', 'Field Filter', 'Field Values', 'Temporal Trend'."
     )
     prompt = f"{system_prompt}\n\nUser: {message}"
 
@@ -141,7 +147,6 @@ def analyze_metadata_query(message):
     except Exception as e:
         return f"⚠️ 呼叫模型分類欄位時出錯：{str(e)}"
 
-
 def summarize_field(field, metadata):
     counts = {}
     for item in metadata:
@@ -151,7 +156,6 @@ def summarize_field(field, metadata):
     sorted_counts = sorted(counts.items(), key=lambda x: -x[1])
     result_lines = [f"{i+1}. {k}：{v} 筆" for i, (k, v) in enumerate(sorted_counts[:5])]
     return f"📊 統計結果（依 {field}）：\n" + "\n".join(result_lines)
-
 
 def list_field_values(message):
     try:
@@ -202,11 +206,12 @@ def analyze_field_query(message):
     except Exception as e:
         return f"⚠️ Failed to load metadata: {str(e)}"
 
-    # 🧠 讓 GPT 萃取欄位名稱與欄位值
+    # 🧠 讓 GPT 萃取多個欄位條件
     system_prompt = (
-        "You are a parser. Please extract the field and value from a user's query if they are asking for cases matching a specific metadata field.\n"
-        "Return a JSON object like: {\"field\": \"subcategory\", \"value\": \"Login/Access\"}\n"
-        "Allowed fields: configurationItem, subcategory, roleComponent, location"
+        "You are a parser. Extract all field=value conditions from the user's message for filtering.\n"
+        "Only include fields: configurationItem, subcategory, roleComponent, location\n"
+        "Return a JSON array like: "
+        "[{\"field\": \"subcategory\", \"value\": \"Login/Access\"}, {\"field\": \"location\", \"value\": \"Taipei\"}]"
     )
     prompt = f"{system_prompt}\n\nUser: {message}"
 
@@ -218,25 +223,75 @@ def analyze_field_query(message):
             timeout=30
         )
         raw = result.stdout.decode("utf-8").strip()
-        print("[🔍 欄位查詢解析]", raw)
+        print("[🔍 多欄位查詢解析]", raw)
 
-        # 嘗試解析成 JSON
-        parsed = json.loads(raw)
-        field = parsed.get("field")
-        value = parsed.get("value")
-        if field not in ["configurationItem", "subcategory", "roleComponent", "location"]:
-            return "⚠️ Invalid field specified."
+        parsed_conditions = json.loads(raw)
+        if not isinstance(parsed_conditions, list):
+            return "⚠️ Invalid parsed result format."
 
-        # 過濾資料
-        matches = [item for item in metadata if item.get(field) == value]
+        # 檢查條件合法性
+        allowed_fields = ["configurationItem", "subcategory", "roleComponent", "location"]
+        filters = [(c["field"], c["value"]) for c in parsed_conditions if c.get("field") in allowed_fields]
+
+        if not filters:
+            return "⚠️ No valid filters extracted from the query."
+
+        # 篩選資料：AND 條件
+        def match_all(item):
+            return all(item.get(field) == value for field, value in filters)
+
+        matches = [item for item in metadata if match_all(item)]
         if not matches:
-            return f"🔍 No results found for {field} = {value}."
+            return f"🔍 No results found for: " + " AND ".join([f"{f}={v}" for f, v in filters])
 
         lines = [f"- {item.get('text', '')[:100]}..." for item in matches[:5]]
-        return f"🔎 Top matches for {field} = {value}:\n" + "\n".join(lines)
+        return (
+            f"🔎 Top matches for:\n" +
+            "\n".join([f"• {f} = {v}" for f, v in filters]) +
+            "\n\n" + "\n".join(lines)
+        )
 
     except Exception as e:
         return f"⚠️ Failed to parse or search: {str(e)}"
+
+
+
+def analyze_temporal_trend(message):
+    try:
+        with open("kb_metadata.json", encoding="utf-8") as f:
+            metadata = json.load(f)
+    except Exception as e:
+        return f"⚠️ 無法載入資料：{str(e)}"
+
+    if not metadata or "analysisTime" not in metadata[0]:
+        return "⚠️ 缺少 analysisTime 欄位，無法分析趨勢。"
+
+    # 轉為 DataFrame
+    df = pd.DataFrame(metadata)
+    df["analysisTime"] = pd.to_datetime(df["analysisTime"], errors="coerce")
+    df = df.dropna(subset=["analysisTime"])
+
+    # 群組每月數量
+    df["month"] = df["analysisTime"].dt.to_period("M")
+    trend = df.groupby("month").size()
+
+    # 畫圖
+    plt.figure(figsize=(8, 4))
+    trend.plot(kind="line", marker="o")
+    plt.title("📈 趨勢圖：每月案件數")
+    plt.xlabel("月份")
+    plt.ylabel("案件數量")
+    plt.tight_layout()
+
+    # 轉為 base64 圖片嵌入
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png")
+    buf.seek(0)
+    img_base64 = base64.b64encode(buf.read()).decode("utf-8")
+    plt.close()
+
+    return f"<img src='data:image/png;base64,{img_base64}' alt='Trend chart'>"
+
 
 
 
@@ -259,6 +314,11 @@ def run_offline_gpt(message, model="mistral", history=[]):
     if query_type == "Field Values":
         print("📋 類型為欄位值清單，開始列出欄位值...")
         return list_field_values(message)
+    
+    if query_type == "Temporal Trend":
+        print("📈 類型為時間趨勢查詢，開始繪製圖表...")
+        return analyze_temporal_trend(message)
+
 
 
 

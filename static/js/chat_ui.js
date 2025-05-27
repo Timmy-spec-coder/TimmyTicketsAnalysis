@@ -12,11 +12,13 @@ function navigateTo1(page) {
 }
 
 function renderMessage(content) {
+  if (content.includes("<img")) return content;  // 若是圖表 HTML，直接回傳
   return content
     .replace(/```([^`]+)```/gs, '<pre><code>$1</code></pre>')
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     .replace(/\n/g, "<br>");
 }
+
 
 
 function scrollToBottom() {
