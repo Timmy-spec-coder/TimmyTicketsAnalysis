@@ -342,7 +342,7 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
         };
         xhrCheck.send(); // 發送檢查請求
     };
-
+//--------------------------------------------------------------------------------------------------------------------------------
     // 處理上傳完成的回應
     xhr.onload = function () {
         spinner.style.display = 'none'; // 隱藏加載指示器
@@ -358,8 +358,10 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
             analysisTime: data.data[0]?.analysisTime || new Date().toISOString(),
             data: data.data
             })); // 儲存最後的結果到 localStorage
+            kbAnalysisTriggered = true;  // ✅ 表示這次真的送出分析了
 
-            pollKbStatus();
+            showKbStatusBar();          // ✅ 主動顯示提示條（不用等輪詢）
+            pollKbStatus();             // ✅ 啟動輪詢，等建庫結束再自動隱藏
 
 
             if (data.error) {
@@ -470,26 +472,6 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
             // 顯示分析完成提示
             const analysisTime = data.data[0]?.analysisTime || '未知時間';
             addHistoryItem(data.uid, file.name, summaryBox.innerText, analysisTime);
-
-          // ---------------------------------------------------尚未實做出來-------------------------------------------------------------------------------------
-            // document.getElementById('copyResult').onclick = () => {
-            //             navigator.clipboard.writeText(resultText).then(() => {
-            //                 alert('✅ 結果已複製到剪貼簿！'); // 成功複製提示
-            //             }).catch(err => {
-            //                 alert('❌ 複製失敗：' + err); // 複製失敗提示
-            //             });
-            //         };
-
-            // fileInput.value = ''; // 清空檔案輸入框
-            // droppedFile = null; // 清空拖曳檔案暫存
-
-            // fileInfo.style.transition = 'opacity 0.5s'; // 設定檔案資訊的淡出效果
-            // fileInfo.style.opacity = '0'; // 開始淡出
-            // setTimeout(() => fileInfo.innerText = '', 500); // 0.5 秒後清空文字
-
-            // resultDiv.scrollIntoView({ behavior: 'smooth' }); // 平滑滾動到結果區域
-         // ---------------------------------------------------尚未實做出來-------------------------------------------------------------------------------------
-
         } 
         else 
         {
@@ -510,7 +492,7 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
 }
 );
 
-
+//---------------------------------------------------------------------------------------
 function previewExcel(file) {
   const formData = new FormData();
   formData.append('file', file);
@@ -750,10 +732,16 @@ window.addEventListener('DOMContentLoaded', () => {
     });
     localStorage.setItem("historyData", JSON.stringify(cleanedHistory));
 
-// 初始化一次
-updateWeightSum();
+  pollKbStatus();  // 🔁 每頁載入後自動偵測
+  // 初始化一次
+
+
+  updateWeightSum();
 
 });
+
+
+
 
 // 監聽檔案輸入框的變更事件
 document.getElementById('excelFile').addEventListener('change', function () {
@@ -836,7 +824,7 @@ function navigateTo1(page) {
 
     window.location.href = paths[page] || "/";
 }
-
+//------------------------------------------------------------------------------------
 
 function showToast() {
     // 獲取 ID 為 'toast' 的 HTML 元素
@@ -851,73 +839,76 @@ function hideToast() {
   const toast = document.getElementById('toast');
   toast.style.display = 'none';
 }
-// 更新權重總和的函數
-
-
 let kbPolling = null;
 let lastKbStatus = null; // 全域
+let kbAnalysisTriggered = false;  // ✅ 分析是否真的啟動（新增這行）
+
+
+
+
 
 function showKbStatusBar() {
   const bar = document.getElementById("kbStatusBar");
   if (bar) bar.style.display = "block";
 
-  // ✅ 禁止離開、跳頁（包含重新整理、其他 html）
-  window.onbeforeunload = (e) => {
-    e.preventDefault();
-    e.returnValue = "知識庫正在建立中，確定要離開？";
-    return "知識庫正在建立中，確定要離開？";
-  };
+  // ❌ 已移除跳頁警告
+
+  const submitBtn = document.getElementById("submitBtn");
+  if (submitBtn) submitBtn.disabled = true;
 }
+
 
 function hideKbStatusBar() {
   const bar = document.getElementById("kbStatusBar");
   if (bar) bar.style.display = "none";
 
-  // ✅ 解鎖離開
-  window.onbeforeunload = null;
+  const submitBtn = document.getElementById("submitBtn");
+  if (submitBtn) submitBtn.disabled = false;
 }
 
-
 function pollKbStatus() {
+  if (!kbAnalysisTriggered) {
+    console.log("⏹️ 未觸發分析，不執行輪詢");
+    return;
+  }
+
   if (kbPolling) clearInterval(kbPolling);
+
+  window.kbBuilding = false;
+  window.kbToastShown = false;
+  lastKbStatus = null;
 
   kbPolling = setInterval(async () => {
     const res = await fetch("/kb-status");
     const data = await res.json();
+    const isBuilding = data.building;
 
     console.log("polling...", data);
 
-    if (data.building) {
-      window.kbBuilding = true;       // ✅ 開始建構
-      showKbStatusBar();
-      lastKbStatus = true;
-    } else {
-      window.kbBuilding = false;      // ✅ 結束建構
-      hideKbStatusBar();
-      if (lastKbStatus === true) {
-        showToastMessage("✅ 知識庫已建立完成！", "success", 10000);
-        lastKbStatus = false;
+    const wasBuilding = window.kbBuilding;
+    window.kbBuilding = isBuilding;
+
+    if (isBuilding) {
+      if (!wasBuilding) {
+        showKbStatusBar();
+        window.kbToastShown = false;
       }
-      clearInterval(kbPolling);
+    } else {
+      if (wasBuilding && !window.kbToastShown) {
+      showToastMessage("✅ 知識庫已建立完成！", "success");
+        const modal = new bootstrap.Modal(document.getElementById('kbFinishedModal'));
+        modal.show();
+        hideKbStatusBar();
+        window.kbToastShown = true;
+        clearInterval(kbPolling);
+      }
     }
   }, 2000);
 }
 
 
 
-
-
-
-
-
-
-
-
-
-
-
 // 你可以在上傳、分析、或任何新檔案存檔事件後自動呼叫 onAnalyzeFinish()
-
 function showPreview(item) {
     // 獲取 ID 為 'modalContent' 的 HTML 元素
     const modalContent = document.getElementById('modalContent');
@@ -950,14 +941,4 @@ function showPreview(item) {
     }
     // 顯示模態框
     previewModalInstance.show();
-}
-
-function showKbStatusBar() {
-  const bar = document.getElementById('kbStatusBar');
-  if (bar) bar.style.display = 'block';
-}
-
-function hideKbStatusBar() {
-  const bar = document.getElementById('kbStatusBar');
-  if (bar) bar.style.display = 'none';
 }

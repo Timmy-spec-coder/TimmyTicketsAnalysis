@@ -973,6 +973,32 @@ body.dark-mode #previewTableWrapper {
   animation: dotsAnimation 1.5s infinite steps(3, end);
 }
 
+body.dark-mode #kbStatusBar .dots::after {
+  color: #ffe082;
+}
+
+/* ✅ 深色模式下的 Modal 背景與字體 */
+body.dark-mode #kbModalContent {
+  background-color: #1e1e2f;
+  color: #d6e4ff;
+  border: 1px solid #2c3e50;
+}
+
+body.dark-mode #kbModalContent .btn {
+  background-color: #0d6efd;
+  border: none;
+}
+
+body.dark-mode #kbModalContent .btn:hover {
+  background-color: #0b5ed7;
+}
+
+/* ☀️ 淺色模式下也可套用圓角 + 陰影 */
+#kbModalContent {
+  border-radius: 1rem;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+}
+
 
 
 

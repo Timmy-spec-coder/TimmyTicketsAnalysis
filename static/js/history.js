@@ -8,7 +8,9 @@ window.addEventListener('DOMContentLoaded', () => {
     const historyList = document.getElementById('historyList');
     // 從 localStorage 取得歷史紀錄資料，若無資料則設為空陣列
     const savedHistory = JSON.parse(localStorage.getItem('historyData') || '[]');
+    
     const noHistoryMsg = document.getElementById('no-history-msg');
+    
     if (savedHistory.length === 0) {
         noHistoryMsg.style.display = 'block';
     } else {

@@ -95,6 +95,17 @@ document.getElementById("chatForm").addEventListener("submit", async (e) => {
   const input = document.getElementById("chatInput");
   const msg = input.value.trim();
   if (!msg) return;
+    // 🛡️ 若建置中，直接擋掉提問
+  if (window.kbBuilding) {
+    const box = document.getElementById("chatBox");
+    const div = document.createElement("div");
+    div.className = "msg bot";
+    div.innerHTML = `🤖 資料庫正在建置中，暫時無法回答問題，請稍後再試。`;
+    box.appendChild(div);
+    scrollToBottom();
+    return;
+  }
+
 
   const box = document.getElementById("chatBox");
   const timestamp = new Date().toLocaleTimeString();

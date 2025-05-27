@@ -38,6 +38,22 @@
   正在建立知識庫，請稍候<span class="dots"></span>
 </div>
 
+<!-- 📦 Modal：建置完成提示（深色模式友善 + 無右上角） -->
+<div class="modal fade" id="kbFinishedModal" tabindex="-1" aria-labelledby="kbFinishedLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content shadow-lg border-0 rounded-4" id="kbModalContent">
+      <div class="modal-body text-center p-5">
+        <div class="fs-1 mb-3">✅</div>
+        <h4 class="fw-bold mb-3">知識庫已建立完成</h4>
+        <p class="mb-4">剛才的分析結果已成功加入知識庫，您可以繼續使用系統 🎉</p>
+        <button type="button" class="btn btn-success px-4" data-bs-dismiss="modal">我知道了</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
 
     <div class="sidebar" id="sidebar">
         <h4>功能選單</h4>
@@ -233,6 +249,7 @@
 
 <!-- 你自己的 JS 檔放最後 -->
 <script src="{{ url_for('static', filename='js/FrontEnd.js') }}"></script>
+<script src="{{ url_for('static', filename='js/kb_status.js') }}"></script>
 
 
 
