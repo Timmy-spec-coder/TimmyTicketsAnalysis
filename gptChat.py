@@ -293,37 +293,130 @@ def analyze_temporal_trend(message):
     return f"<img src='data:image/png;base64,{img_base64}' alt='Trend chart'>"
 
 
+# 存入記憶（以最後一個 query 為基礎）
+def save_query_context(chat_id, query, result_type, filter_info=None, result_summary=None):
+    filepath = f"chat_history/{chat_id}.json"
+    try:
+        with open(filepath, encoding="utf-8") as f:
+            history = json.load(f)
+    except:
+        history = []
+
+    # 🔁 更新最新記憶
+    context = {
+        "type": result_type,
+        "query": query,
+        "filters": filter_info,          # e.g. {"field": "subcategory", "value": "Crash/Hang"}
+        "summary": result_summary        # 可選：簡化摘要
+    }
+
+    if history:
+        history[-1]["context"] = context
+
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(history, f, ensure_ascii=False, indent=2)
+
+
+
+def is_follow_up_query(message: str) -> bool:
+    keywords = ["previous", "last query", "those", "add filter", "now show", "continue", "follow up"]
+    return any(kw in message.lower() for kw in keywords)
+
+
+
+def handle_follow_up(chat_id, message):
+    filepath = f"chat_history/{chat_id}.json"
+    try:
+        with open(filepath, encoding="utf-8") as f:
+            history = json.load(f)
+    except:
+        return "⚠️ 無法讀取先前對話記錄，請確認 chat_id 是否正確。"
+
+    if not history or "context" not in history[-1]:
+        return "⚠️ 查無先前查詢條件，請重新描述您的需求。"
+
+    context = history[-1]["context"]
+    result_type = context.get("type")
+
+    # 👇 根據先前查詢類型接續處理
+    if result_type == "Field Filter":
+        original = context.get("filters", {})
+        new_filter_prompt = (
+            "You are a filter parser. Based on this message, extract an additional field and value to add as a filter.\n"
+            "Return JSON like: {\"field\": \"subcategory\", \"value\": \"Crash\"}"
+        )
+        prompt = f"{new_filter_prompt}\n\nUser: {message}"
+
+        try:
+            result = subprocess.run(
+                ["ollama", "run", "phi3:mini"],
+                input=prompt.encode("utf-8"),
+                capture_output=True,
+                timeout=30
+            )
+            new_filter = json.loads(result.stdout.decode("utf-8").strip())
+            field = new_filter.get("field")
+            value = new_filter.get("value")
+
+            if field not in ["configurationItem", "subcategory", "roleComponent", "location"]:
+                return "⚠️ 無效的欄位"
+
+            filters = [original] + [new_filter]
+            with open("kb_metadata.json", encoding="utf-8") as f:
+                metadata = json.load(f)
+            matches = metadata
+            for f in filters:
+                matches = [m for m in matches if m.get(f["field"]) == f["value"]]
+            lines = [f"- {item.get('text', '')[:100]}..." for item in matches[:5]]
+            return f"🔎 延伸查詢結果（共 {len(matches)} 筆）：\n" + "\n".join(lines)
+
+        except Exception as e:
+            return f"⚠️ 延伸查詢失敗：{str(e)}"
+
+    # 你也可以在這裡支援 Statistical Analysis、Semantic Query 等的延伸策略
+    return "⚠️ 目前只支援欄位篩選的延伸查詢。"
+
 
 
 
 # ----------- GPT 主函式 -----------
-def run_offline_gpt(message, model="mistral", history=[]):
+def run_offline_gpt(message, model="mistral", history=[], chat_id=None):
     print("🟢 啟動 GPT 回答流程...")
-
-
 
     query_type = classify_query_type(message)
 
+    if is_follow_up_query(message) and chat_id:
+        return handle_follow_up(chat_id, message)
+    print(f"🔍 判斷結果：{query_type}")
+
+
     if query_type == "Statistical Analysis":
-        return analyze_metadata_query(message)
+        reply = analyze_metadata_query(message)
+        save_query_context(chat_id, message, query_type, result_summary=reply[:200])
+        return reply
 
     if query_type == "Field Filter":
         print("🔄 類型為欄位過濾，開始進行過濾...")
-        return analyze_field_query(message)
-    
+        reply = analyze_field_query(message)
+        try:
+            parsed = json.loads(reply)
+            filters = {"field": parsed.get("field"), "value": parsed.get("value")}
+        except:
+            filters = None
+        save_query_context(chat_id, message, query_type, filter_info=filters, result_summary=reply[:200])
+        return reply
+
     if query_type == "Field Values":
         print("📋 類型為欄位值清單，開始列出欄位值...")
-        return list_field_values(message)
-    
+        reply = list_field_values(message)
+        save_query_context(chat_id, message, query_type, result_summary=reply[:200])
+        return reply
+
     if query_type == "Temporal Trend":
         print("📈 類型為時間趨勢查詢，開始繪製圖表...")
-        return analyze_temporal_trend(message)
-
-
-
-
-
-
+        reply = analyze_temporal_trend(message)
+        save_query_context(chat_id, message, query_type, result_summary=reply[:200])
+        return reply
 
     print("🔄 類型為語意查詢，開始檢索知識庫...")
     retrieved = search_knowledge_base(message, top_k=3)
@@ -364,6 +457,9 @@ def run_offline_gpt(message, model="mistral", history=[]):
 
         reply = result.stdout.decode("utf-8").strip()
         print("\n📥 模型回覆：", reply)
+
+        save_query_context(chat_id, message, query_type, result_summary=reply[:200])
+
         return reply if reply else "⚠️ 沒有收到模型回應。"
 
     except Exception as e:
