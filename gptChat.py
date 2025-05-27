@@ -62,16 +62,22 @@ def search_knowledge_base(query, top_k=3):
     print(f"[RAG] 🧠 取出知識庫資料：{[kb_texts[i][:50] for i in I[0]]}")
     return [kb_texts[i] for i in I[0]]
 
-# ----------- 類型判斷（查詢 or 統計） -----------
+
+
+
+
+# ----------- 提問類型分類 -----------
 def classify_query_type(message):
     print("🤖 判斷提問類型...")
     system_prompt = (
-        "You are a classification assistant. Based on the user's question, determine whether it belongs to one of the following types:"
-        "1. Semantic Query (the user wants to find similar past cases or ask how to solve an issue)"
-        "2. Statistical Analysis (the user wants to know counts, most frequent categories, or metadata summaries)"
-        "Please respond with only one of the following: 'Semantic Query' or 'Statistical Analysis'."
+        "You are a classification assistant. Based on the user's question, determine whether it belongs to one of the following types:\n"
+        "1. Semantic Query (user wants similar past cases or issue solving)\n"
+        "2. Statistical Analysis (user wants counts or summaries)\n"
+        "3. Field Filter (user asks to find cases matching a specific field=value)\n"
+        "4. Field Values (user wants to know all possible values of a specific field)\n"
+        "Please respond with one of: 'Semantic Query', 'Statistical Analysis', 'Field Filter', 'Field Values'."
     )
-    prompt = f"{system_prompt}\n\n使用者提問：{message}"
+    prompt = f"{system_prompt}\n\nUser: {message}"
 
     try:
         result = subprocess.run(
@@ -87,6 +93,12 @@ def classify_query_type(message):
         print(f"⚠️ 分類判斷失敗：{str(e)}")
         return "Semantic Query"
 
+
+
+
+
+
+
 # ----------- 統計分析查詢 -----------
 def analyze_metadata_query(message):
     print("📊 執行統計分析...")
@@ -97,10 +109,11 @@ def analyze_metadata_query(message):
         return f"⚠️ 無法載入 metadata：{str(e)}"
 
     system_prompt = (
-        "You are an assistant helping to analyze a structured knowledge base.\n"
-        "Based on the user's message, determine which field should be used for statistical aggregation.\n"
-        "You can choose one of: subcategory, configurationItem, roleComponent, or location.\n"
-        "Just return the field name, nothing else."
+        "You are helping analyze a structured knowledge base.\n"
+        "From the user's question, choose ONE of the following fields to do statistical aggregation:\n"
+        " - subcategory\n - configurationItem\n - roleComponent\n - location\n"
+        "If the request is vague or unclear, respond with '__fallback__'.\n"
+        "Only return one word: the field name or '__fallback__'."
     )
     prompt = f"{system_prompt}\n\nUser: {message}"
 
@@ -112,28 +125,145 @@ def analyze_metadata_query(message):
             timeout=30
         )
         field = result.stdout.decode("utf-8").strip()
-        print(f"[欄位判斷] 使用欄位：{field}")
+        print(f"[欄位判斷] GPT 回覆欄位：{field}")
+
+        if field == "__fallback__":
+            return "\n\n".join([
+                summarize_field("subcategory", metadata),
+                summarize_field("configurationItem", metadata)
+            ])
+
         if field not in ["subcategory", "configurationItem", "roleComponent", "location"]:
             return f"⚠️ 無法判斷要統計的欄位（回覆為：{field}）"
 
-        counts = {}
-        for item in metadata:
-            key = item.get(field, "未標註")
-            counts[key] = counts.get(key, 0) + 1
-
-        sorted_counts = sorted(counts.items(), key=lambda x: -x[1])
-        result_lines = [f"{i+1}. {k}：{v} 筆" for i, (k, v) in enumerate(sorted_counts[:5])]
-        return f"📊 統計結果（依 {field}）：\n" + "\n".join(result_lines)
+        return summarize_field(field, metadata)
 
     except Exception as e:
         return f"⚠️ 呼叫模型分類欄位時出錯：{str(e)}"
 
+
+def summarize_field(field, metadata):
+    counts = {}
+    for item in metadata:
+        key = item.get(field, "未標註")
+        counts[key] = counts.get(key, 0) + 1
+
+    sorted_counts = sorted(counts.items(), key=lambda x: -x[1])
+    result_lines = [f"{i+1}. {k}：{v} 筆" for i, (k, v) in enumerate(sorted_counts[:5])]
+    return f"📊 統計結果（依 {field}）：\n" + "\n".join(result_lines)
+
+
+def list_field_values(message):
+    try:
+        with open("kb_metadata.json", encoding="utf-8") as f:
+            metadata = json.load(f)
+    except Exception as e:
+        return f"⚠️ Failed to load metadata: {str(e)}"
+
+    # 由 GPT 判斷使用者問的是哪一個欄位
+    system_prompt = (
+        "You are a parser. The user is asking about what values are available in a certain field.\n"
+        "Please extract which field they want to list.\n"
+        "Return the field name only. Must be one of: configurationItem, subcategory, roleComponent, location"
+    )
+    prompt = f"{system_prompt}\n\nUser: {message}"
+
+    try:
+        result = subprocess.run(
+            ["ollama", "run", "phi3:mini"],
+            input=prompt.encode("utf-8"),
+            capture_output=True,
+            timeout=30
+        )
+        field = result.stdout.decode("utf-8").strip()
+        if field not in ["configurationItem", "subcategory", "roleComponent", "location"]:
+            return f"⚠️ Invalid field: {field}"
+
+        values = set()
+        for item in metadata:
+            value = item.get(field)
+            if value: values.add(value)
+
+        sorted_vals = sorted(values)
+        lines = [f"- {v}" for v in sorted_vals[:20]]  # 最多顯示 20 個
+        return f"📋 Values in '{field}' field:\n" + "\n".join(lines)
+
+    except Exception as e:
+        return f"⚠️ Failed to process: {str(e)}"
+
+    
+
+
+# ----------- 欄位查詢分析 -----------
+def analyze_field_query(message):
+    try:
+        with open("kb_metadata.json", encoding="utf-8") as f:
+            metadata = json.load(f)
+    except Exception as e:
+        return f"⚠️ Failed to load metadata: {str(e)}"
+
+    # 🧠 讓 GPT 萃取欄位名稱與欄位值
+    system_prompt = (
+        "You are a parser. Please extract the field and value from a user's query if they are asking for cases matching a specific metadata field.\n"
+        "Return a JSON object like: {\"field\": \"subcategory\", \"value\": \"Login/Access\"}\n"
+        "Allowed fields: configurationItem, subcategory, roleComponent, location"
+    )
+    prompt = f"{system_prompt}\n\nUser: {message}"
+
+    try:
+        result = subprocess.run(
+            ["ollama", "run", "phi3:mini"],
+            input=prompt.encode("utf-8"),
+            capture_output=True,
+            timeout=30
+        )
+        raw = result.stdout.decode("utf-8").strip()
+        print("[🔍 欄位查詢解析]", raw)
+
+        # 嘗試解析成 JSON
+        parsed = json.loads(raw)
+        field = parsed.get("field")
+        value = parsed.get("value")
+        if field not in ["configurationItem", "subcategory", "roleComponent", "location"]:
+            return "⚠️ Invalid field specified."
+
+        # 過濾資料
+        matches = [item for item in metadata if item.get(field) == value]
+        if not matches:
+            return f"🔍 No results found for {field} = {value}."
+
+        lines = [f"- {item.get('text', '')[:100]}..." for item in matches[:5]]
+        return f"🔎 Top matches for {field} = {value}:\n" + "\n".join(lines)
+
+    except Exception as e:
+        return f"⚠️ Failed to parse or search: {str(e)}"
+
+
+
+
 # ----------- GPT 主函式 -----------
 def run_offline_gpt(message, model="mistral", history=[]):
     print("🟢 啟動 GPT 回答流程...")
+
+
+
     query_type = classify_query_type(message)
+
     if query_type == "Statistical Analysis":
         return analyze_metadata_query(message)
+
+    if query_type == "Field Filter":
+        print("🔄 類型為欄位過濾，開始進行過濾...")
+        return analyze_field_query(message)
+    
+    if query_type == "Field Values":
+        print("📋 類型為欄位值清單，開始列出欄位值...")
+        return list_field_values(message)
+
+
+
+
+
 
     print("🔄 類型為語意查詢，開始檢索知識庫...")
     retrieved = search_knowledge_base(message, top_k=3)

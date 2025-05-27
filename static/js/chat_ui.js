@@ -371,6 +371,12 @@ document.getElementById("showHistoryBtn").addEventListener("click", async () => 
 });
 
 
+// 📊 顯示統計資訊
+function sendStat(field) {
+  const input = document.getElementById("chatInput");
+  input.value = `Please show statistics of ${field}`;
+  document.getElementById("chatForm").requestSubmit();
+}
 
 
 
@@ -390,6 +396,8 @@ document.getElementById("clearChatBtn").addEventListener("click", () => {
     scrollToBottom(); // ✅ 滾到底部，避免有滾動殘留
   }
 });
+
+
 
 function createNewChatSession() {
   const now = new Date();
