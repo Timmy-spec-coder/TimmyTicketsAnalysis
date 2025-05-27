@@ -2,6 +2,7 @@ import subprocess
 import os
 import pickle
 import faiss
+import json
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
@@ -23,10 +24,13 @@ def load_kb():
 kb_model, kb_index, kb_texts = load_kb()
 
 
+
+
+# ----------- 知識庫摘要壓縮 -----------
 def summarize_retrieved_kb(retrieved, model="phi4-mini"):
     if not retrieved:
         return ""
-    
+
     prompt = "請根據以下知識庫內容，整理出一段精簡摘要，幫助我更快理解處理方式與重點：\n\n"
     for i, chunk in enumerate(retrieved, 1):
         prompt += f"{i}. {chunk.strip()}\n"
@@ -49,6 +53,7 @@ def summarize_retrieved_kb(retrieved, model="phi4-mini"):
         return ""
 
 
+# ----------- 知識庫檢索 -----------
 def search_knowledge_base(query, top_k=3):
     if kb_model is None or kb_index is None or kb_texts is None:
         return []
@@ -59,11 +64,82 @@ def search_knowledge_base(query, top_k=3):
 
     return [kb_texts[i] for i in I[0]]
 
+# ----------- 類型判斷（查詢 or 統計） -----------
+def classify_query_type(message):
+    system_prompt = (
+        "You are a classification assistant. Based on the user's question, determine whether it belongs to one of the following types:"
+        "1. Semantic Query (the user wants to find similar past cases or ask how to solve an issue)"
+        "2. Statistical Analysis (the user wants to know counts, most frequent categories, or metadata summaries)"
+        "Please respond with only one of the following: 'Semantic Query' or 'Statistical Analysis'."
+    )
+    prompt = f"{system_prompt}\n\n使用者提問：{message}"
+
+    try:
+        result = subprocess.run(
+            ["ollama", "run", "phi3:mini"],
+            input=prompt.encode("utf-8"),
+            capture_output=True,
+            timeout=30
+        )
+        reply = result.stdout.decode("utf-8").strip()
+        print(f"[分類判斷] 📥 回覆：{reply}")
+        return reply
+    except Exception as e:
+        print(f"⚠️ 分類判斷失敗：{str(e)}")
+        return "Semantic Query"
+
+
+
+
+# ----------- 統計分析查詢 -----------
+def analyze_metadata_query(message):
+    try:
+        with open("kb_metadata.json", encoding="utf-8") as f:
+            metadata = json.load(f)
+    except Exception as e:
+        return f"⚠️ 無法載入 metadata：{str(e)}"
+
+    # 用 GPT 判斷要統計哪一欄位（如 subcategory / configurationItem）
+    system_prompt = (
+        "You are an assistant helping to analyze a structured knowledge base.\n"
+        "Based on the user's message, determine which field should be used for statistical aggregation.\n"
+        "You can choose one of: subcategory, configurationItem, roleComponent, or location.\n"
+        "Just return the field name, nothing else."
+    )
+    prompt = f"{system_prompt}\n\nUser: {message}"
+
+    try:
+        result = subprocess.run(
+            ["ollama", "run", "phi3:mini"],
+            input=prompt.encode("utf-8"),
+            capture_output=True,
+            timeout=30
+        )
+        field = result.stdout.decode("utf-8").strip()
+        if field not in ["subcategory", "configurationItem", "roleComponent", "location"]:
+            return f"⚠️ 無法判斷要統計的欄位（回覆為：{field}）"
+
+        # 開始統計該欄位的出現次數
+        counts = {}
+        for item in metadata:
+            key = item.get(field, "未標註")
+            counts[key] = counts.get(key, 0) + 1
+
+        sorted_counts = sorted(counts.items(), key=lambda x: -x[1])
+        result_lines = [f"{i+1}. {k}：{v} 筆" for i, (k, v) in enumerate(sorted_counts[:5])]
+        return f"📊 統計結果（依 {field}）：\n" + "\n".join(result_lines)
+
+    except Exception as e:
+        return f"⚠️ 呼叫模型分類欄位時出錯：{str(e)}"
+
 # ----------- GPT 主函式 -----------
 def run_offline_gpt(message, model="mistral", history=[]):
     """
     使用 Ollama 執行本地 GPT 模型推論，支援知識庫檢索（RAG）與上下文。
     """
+    query_type = classify_query_type(message)
+    if query_type == "Statistical Analysis":
+        return "🔧 尚未接上統計分析邏輯，可在此處呼叫 metadata 分析函式。"
 
     # 🔍 Step 1: 檢索知識庫
     retrieved = search_knowledge_base(message, top_k=3)
@@ -81,7 +157,6 @@ def run_offline_gpt(message, model="mistral", history=[]):
 
     kb_context = summarize_retrieved_kb(retrieved, model="phi4-mini")  # ✅ 固定用壓縮模型
 
-
     # 🔁 組合歷史對話（最多取 5 筆）
     context = ""
     for turn in history[-5:]:
@@ -96,7 +171,6 @@ def run_offline_gpt(message, model="mistral", history=[]):
     print(prompt[:300])
 
     try:
-        # 🛠 呼叫 Ollama CLI
         result = subprocess.run(
             ["ollama", "run", model],
             input=prompt.encode("utf-8"),

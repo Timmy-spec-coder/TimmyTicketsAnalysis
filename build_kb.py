@@ -11,9 +11,15 @@ from datetime import datetime
 print("✅ [DEBUG] 你有成功呼叫 build_kb.py")
 
 # ========== ✅ 加入 log 與鎖定檢查 ==========
-
 LOCK_FILE = "kb_building.lock"
 LOG_FILE = "kb_log.txt"
+
+KB_INDEX = "kb_index.faiss"
+KB_TEXTS = "kb_texts.pkl"
+KB_METADATA = "kb_metadata.json"
+PROCESSED_LOG = "processed_files.json"
+DATA_DIR = "json_data"
+MODEL_NAME = "all-MiniLM-L6-v2"
 
 def log(msg):
     with open(LOG_FILE, "a", encoding="utf-8") as f:
@@ -29,14 +35,6 @@ if os.path.exists(LOCK_FILE):
 with open(LOCK_FILE, "w") as f:
     f.write("building")
 
-# =============================================
-
-DATA_DIR = "json_data"
-KB_INDEX = "kb_index.faiss"
-KB_TEXTS = "kb_texts.pkl"
-PROCESSED_LOG = "processed_files.json"
-MODEL_NAME = "all-MiniLM-L6-v2"
-
 def load_processed_files():
     if not os.path.exists(PROCESSED_LOG):
         return set()
@@ -51,28 +49,35 @@ def save_processed_file(file):
             data = json.load(f)
     else:
         data = []
-
-    data.append({ "file": file, "processedAt": now })
-
+    data.append({"file": file, "processedAt": now})
     with open(PROCESSED_LOG, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-def extract_texts_from_json(json_file):
+def extract_texts_and_metadata(json_file):
     with open(json_file, encoding="utf-8") as f:
         data = json.load(f)
-        if isinstance(data, list):
-            items = data
-        elif isinstance(data, dict) and "data" in data:
-            items = data["data"]
-        else:
-            items = [data]
+        items = data["data"] if isinstance(data, dict) and "data" in data else data
+        if not isinstance(items, list):
+            items = [items]
         kb_texts = []
+        metadata = []
         for item in items:
-            ai_summary = item.get("aiSummary") or item.get("problemSummary") or "(AI 擷取失敗)"
+            summary = item.get("aiSummary") or item.get("problemSummary") or "(AI 擷取失敗)"
             solution = item.get("solution") or "(AI 擷取失敗)"
-            text = f"問題：{ai_summary}\n處理方式：{solution}"
+            ci = item.get("configurationItem") or "未知模組"
+            role = item.get("roleComponent") or "未指定元件"
+            sub = item.get("subcategory") or "未分類"
+            loc = item.get("location") or "未提供"
+            text = f"""事件類別：{sub}｜模組：{ci}｜角色：{role}\n地點：{loc}\n問題描述：{summary}\n處理方式：{solution}"""
             kb_texts.append(text)
-        return kb_texts
+            metadata.append({
+                "text": text,
+                "subcategory": sub,
+                "configurationItem": ci,
+                "roleComponent": role,
+                "location": loc
+            })
+        return kb_texts, metadata
 
 def build_kb():
     processed_files = load_processed_files()
@@ -84,29 +89,35 @@ def build_kb():
     print(f"📂 有 {len(all_files)} 個新 JSON 檔要加入知識庫")
     model = SentenceTransformer(MODEL_NAME)
 
-    if os.path.exists(KB_INDEX) and os.path.exists(KB_TEXTS):
-        print("🔄 載入舊有 FAISS index 與文字庫")
+    if os.path.exists(KB_INDEX) and os.path.exists(KB_TEXTS) and os.path.exists(KB_METADATA):
+        print("🔄 載入舊有 FAISS index、文字庫與 metadata")
         index = faiss.read_index(KB_INDEX)
         with open(KB_TEXTS, "rb") as f:
             kb_texts = pickle.load(f)
+        with open(KB_METADATA, "r", encoding="utf-8") as f:
+            metadata = json.load(f)
     else:
         print("🆕 建立全新知識庫")
         index = None
         kb_texts = []
+        metadata = []
 
     for file in tqdm(all_files, desc="📥 加入新知識檔案"):
         path = os.path.join(DATA_DIR, file)
-        new_texts = extract_texts_from_json(path)
+        new_texts, new_metadata = extract_texts_and_metadata(path)
         new_embeddings = model.encode(new_texts, show_progress_bar=False)
         if index is None:
             index = faiss.IndexFlatL2(new_embeddings.shape[1])
         index.add(np.array(new_embeddings))
         kb_texts.extend(new_texts)
+        metadata.extend(new_metadata)
         save_processed_file(file)
 
     faiss.write_index(index, KB_INDEX)
     with open(KB_TEXTS, "wb") as f:
         pickle.dump(kb_texts, f)
+    with open(KB_METADATA, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, ensure_ascii=False, indent=2)
 
     print(f"✅ 知識庫更新完成（總共 {len(kb_texts)} 筆）")
     log(f"✅ [LOG] 成功建立知識庫，共 {len(kb_texts)} 筆")
@@ -119,3 +130,4 @@ if __name__ == "__main__":
             os.remove(LOCK_FILE)
         print("🗂️ 鎖定檔已刪除，結束建庫流程")
         log("✅ [LOG] 知識庫流程結束，lock 已清除")
+        print("📜 日誌已更新，請檢查 kb_log.txt 獲取詳細資訊")
