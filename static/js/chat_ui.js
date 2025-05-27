@@ -230,11 +230,14 @@ document.getElementById("showHistoryBtn").addEventListener("click", async () => 
           📝 <strong>${item.title || "（無標題）"}</strong><br>
           <small class="text-muted">${new Date(item.timestamp).toLocaleString()} ・${item.model}</small>
         </div>
+
+
         <div class="btn-group btn-group-sm">
           <button class="btn btn-outline-primary">載入</button>
           <button class="btn btn-outline-secondary">✏️</button>
           <button class="btn btn-outline-danger">🗑️</button>
         </div>
+        
       `;
 
       // ✅ 載入按鈕
