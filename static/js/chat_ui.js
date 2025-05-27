@@ -178,22 +178,28 @@ scrollToBottom();
     let i = 0;
 
 
-    const typingInterval = setInterval(() => {
-      if (i >= finalChars.length) {
-        clearInterval(typingInterval);
+let tempReply = "";  // 暫存純文字
 
-        // ✅ 打字完畢才真正加入 assistant 回覆到 chatHistory
-        const assistantReply = { role: "assistant", content: reply };
-        chatHistory.push(assistantReply);
-        localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
+const typingInterval = setInterval(() => {
+  if (i >= finalChars.length) {
+    clearInterval(typingInterval);
 
-        scrollToBottom();
-        return;
-      }
+    // ✅ 打字完畢才套用 renderMessage() 美化
+    contentSpan.innerHTML = renderMessage(tempReply);
 
-      contentSpan.innerHTML += finalChars[i++];
-      scrollToBottom();
-    }, 20);
+    const assistantReply = { role: "assistant", content: reply };
+    chatHistory.push(assistantReply);
+    localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
+
+    scrollToBottom();
+    return;
+  }
+
+  tempReply += finalChars[i++];
+  contentSpan.textContent = tempReply;  // ⚠️ 逐字用 textContent 保留純文字
+  scrollToBottom();
+}, 20);
+
 
 
 

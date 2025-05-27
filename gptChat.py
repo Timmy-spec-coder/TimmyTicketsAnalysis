@@ -8,8 +8,8 @@ from sentence_transformers import SentenceTransformer
 
 # ----------- 知識庫向量載入與檢索 -----------
 
-# 你可以把這段放到專案啟動時（如 Flask 啟動後就先執行一次）
 def load_kb():
+    print("🔄 正在載入知識庫...")
     if not os.path.exists("kb_index.faiss") or not os.path.exists("kb_texts.pkl"):
         print("⚠️ 找不到知識庫檔案，RAG 功能停用")
         return None, None, None
@@ -17,20 +17,18 @@ def load_kb():
     index = faiss.read_index("kb_index.faiss")
     with open("kb_texts.pkl", "rb") as f:
         kb_texts = pickle.load(f)
-    print(f"已載入知識庫：{len(kb_texts)} 條")
+    print(f"✅ 已載入知識庫，共 {len(kb_texts)} 筆")
     return model, index, kb_texts
 
-# ⚠️ 注意，這三個變數全域宣告
 kb_model, kb_index, kb_texts = load_kb()
-
-
-
 
 # ----------- 知識庫摘要壓縮 -----------
 def summarize_retrieved_kb(retrieved, model="phi4-mini"):
     if not retrieved:
+        print("⚠️ 無資料可摘要")
         return ""
 
+    print("🧠 正在產生知識庫摘要...")
     prompt = "請根據以下知識庫內容，整理出一段精簡摘要，幫助我更快理解處理方式與重點：\n\n"
     for i, chunk in enumerate(retrieved, 1):
         prompt += f"{i}. {chunk.strip()}\n"
@@ -52,20 +50,21 @@ def summarize_retrieved_kb(retrieved, model="phi4-mini"):
         print(f"⚠️ 壓縮時發生錯誤：{str(e)}")
         return ""
 
-
 # ----------- 知識庫檢索 -----------
 def search_knowledge_base(query, top_k=3):
+    print("🔍 執行語意查詢...")
     if kb_model is None or kb_index is None or kb_texts is None:
+        print("❌ 知識庫尚未載入")
         return []
     query_vec = kb_model.encode([query])
     D, I = kb_index.search(np.array(query_vec), top_k)
     print(f"[RAG] 🔍 查詢: {query}")
     print(f"[RAG] 🧠 取出知識庫資料：{[kb_texts[i][:50] for i in I[0]]}")
-
     return [kb_texts[i] for i in I[0]]
 
 # ----------- 類型判斷（查詢 or 統計） -----------
 def classify_query_type(message):
+    print("🤖 判斷提問類型...")
     system_prompt = (
         "You are a classification assistant. Based on the user's question, determine whether it belongs to one of the following types:"
         "1. Semantic Query (the user wants to find similar past cases or ask how to solve an issue)"
@@ -88,18 +87,15 @@ def classify_query_type(message):
         print(f"⚠️ 分類判斷失敗：{str(e)}")
         return "Semantic Query"
 
-
-
-
 # ----------- 統計分析查詢 -----------
 def analyze_metadata_query(message):
+    print("📊 執行統計分析...")
     try:
         with open("kb_metadata.json", encoding="utf-8") as f:
             metadata = json.load(f)
     except Exception as e:
         return f"⚠️ 無法載入 metadata：{str(e)}"
 
-    # 用 GPT 判斷要統計哪一欄位（如 subcategory / configurationItem）
     system_prompt = (
         "You are an assistant helping to analyze a structured knowledge base.\n"
         "Based on the user's message, determine which field should be used for statistical aggregation.\n"
@@ -116,10 +112,10 @@ def analyze_metadata_query(message):
             timeout=30
         )
         field = result.stdout.decode("utf-8").strip()
+        print(f"[欄位判斷] 使用欄位：{field}")
         if field not in ["subcategory", "configurationItem", "roleComponent", "location"]:
             return f"⚠️ 無法判斷要統計的欄位（回覆為：{field}）"
 
-        # 開始統計該欄位的出現次數
         counts = {}
         for item in metadata:
             key = item.get(field, "未標註")
@@ -134,14 +130,12 @@ def analyze_metadata_query(message):
 
 # ----------- GPT 主函式 -----------
 def run_offline_gpt(message, model="mistral", history=[]):
-    """
-    使用 Ollama 執行本地 GPT 模型推論，支援知識庫檢索（RAG）與上下文。
-    """
+    print("🟢 啟動 GPT 回答流程...")
     query_type = classify_query_type(message)
     if query_type == "Statistical Analysis":
-        return "🔧 尚未接上統計分析邏輯，可在此處呼叫 metadata 分析函式。"
+        return analyze_metadata_query(message)
 
-    # 🔍 Step 1: 檢索知識庫
+    print("🔄 類型為語意查詢，開始檢索知識庫...")
     retrieved = search_knowledge_base(message, top_k=3)
     if retrieved:
         print(f"\n[RAG] ✅ 啟用知識庫輔助，共取出 {len(retrieved)} 筆：")
@@ -151,22 +145,18 @@ def run_offline_gpt(message, model="mistral", history=[]):
     else:
         print("\n[RAG] ⚠️ 未使用知識庫（未找到相似資料）")
 
-    # ✅ 顯示模型選擇
     print(f"[🔧 壓縮用模型] 使用模型：phi4-mini")
     print(f"[🎯 回答用模型] 使用模型：{model}")
 
-    kb_context = summarize_retrieved_kb(retrieved, model="phi4-mini")  # ✅ 固定用壓縮模型
+    kb_context = summarize_retrieved_kb(retrieved, model="phi4-mini")
 
-    # 🔁 組合歷史對話（最多取 5 筆）
     context = ""
     for turn in history[-5:]:
         role = "User" if turn["role"] == "user" else "Assistant"
         context += f"{role}: {turn['content']}\n"
 
-    # 🧠 整合所有上下文、知識庫與提問
     prompt = f"{kb_context}\n\n{context}User: {message}\nAssistant:"
 
-    # ✅ DEBUG
     print("\n[Prompt Preview] 🧾 發送給模型的 Prompt 前 300 字：")
     print(prompt[:300])
 
