@@ -91,7 +91,7 @@ def classify_query_type(message):
             ["ollama", "run", "phi3:mini"],
             input=prompt.encode("utf-8"),
             capture_output=True,
-            timeout=30
+            timeout=600
         )
         reply = result.stdout.decode("utf-8").strip()
         print(f"[分類判斷] 📥 回覆：{reply}")
@@ -556,7 +556,7 @@ def run_offline_gpt(message, model="mistral", history=[], chat_id=None):
             ["ollama", "run", model],
             input=prompt.encode("utf-8"),
             capture_output=True,
-            timeout=600
+            timeout=6000
         )
 
         if result.returncode != 0:
