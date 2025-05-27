@@ -191,6 +191,8 @@ if (showBtn && historyWrapper && historyWrapper.style.display !== "none") {
 
 
 
+
+
 // 📂 展開 / 收合歷史紀錄
 document.getElementById("showHistoryBtn").addEventListener("click", async () => {
   const listUI = document.getElementById("historyListUI");
@@ -223,25 +225,28 @@ document.getElementById("showHistoryBtn").addEventListener("click", async () => 
 
     data.forEach(item => {
       const li = document.createElement("li");
-      li.className = "list-group-item d-flex justify-content-between align-items-center";
+      li.className = "list-group-item";
 
       li.innerHTML = `
-        <div style="flex-grow: 1;">
-          📝 <strong>${item.title || "（無標題）"}</strong><br>
-          <small class="text-muted">${new Date(item.timestamp).toLocaleString()} ・${item.model}</small>
+        <div class="d-flex justify-content-between align-items-start">
+          <div class="history-click-target" style="cursor: pointer;">
+            📝 <strong>${item.title || "（無標題）"}</strong><br>
+            <small class="text-muted">${new Date(item.timestamp).toLocaleString()} ・${item.model}</small>
+          </div>
+          <div class="dropdown">
+            <button class="btn btn-sm btn-link text-muted dropdown-toggle dropdown-toggle-no-caret" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+              ⋯
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item rename-btn" href="#">✏️ 編輯標題</a></li>
+              <li><a class="dropdown-item text-danger delete-btn" href="#">🗑️ 刪除話題</a></li>
+            </ul>
+          </div>
         </div>
-
-
-        <div class="btn-group btn-group-sm">
-          <button class="btn btn-outline-primary">載入</button>
-          <button class="btn btn-outline-secondary">✏️</button>
-          <button class="btn btn-outline-danger">🗑️</button>
-        </div>
-        
       `;
 
-      // ✅ 載入按鈕
-      li.querySelectorAll("button")[0].onclick = async () => {
+      // ✅ 點整塊標題區塊就載入對話
+      li.querySelector(".history-click-target").onclick = async () => {
         const res = await fetch(`/chat-history/${item.id}`);
         const json = await res.json();
 
@@ -263,8 +268,8 @@ document.getElementById("showHistoryBtn").addEventListener("click", async () => 
         scrollToBottom();
       };
 
-      // ✏️ 編輯按鈕
-      li.querySelectorAll("button")[1].onclick = async () => {
+      // ✏️ 編輯標題
+      li.querySelector(".rename-btn").onclick = async () => {
         const newTitle = prompt("請輸入新的話題名稱：", item.title || "");
         if (!newTitle) return;
 
@@ -277,8 +282,8 @@ document.getElementById("showHistoryBtn").addEventListener("click", async () => 
           const result = await res.json();
           if (result.success) {
             alert("✅ 標題已更新！");
-            document.getElementById("showHistoryBtn").click(); // 關閉
-            setTimeout(() => document.getElementById("showHistoryBtn").click(), 200); // 重新打開
+            document.getElementById("showHistoryBtn").click();
+            setTimeout(() => document.getElementById("showHistoryBtn").click(), 200);
           } else {
             alert("❌ 無法更新標題：" + (result.error || ""));
           }
@@ -287,8 +292,8 @@ document.getElementById("showHistoryBtn").addEventListener("click", async () => 
         }
       };
 
-      // 🗑️ 刪除按鈕
-      li.querySelectorAll("button")[2].onclick = async () => {
+      // 🗑️ 刪除話題
+      li.querySelector(".delete-btn").onclick = async () => {
         if (!confirm(`是否刪除這個話題？\n「${item.title || item.id}」`)) return;
 
         try {
@@ -307,8 +312,13 @@ document.getElementById("showHistoryBtn").addEventListener("click", async () => 
       };
 
       listUI.appendChild(li);
+
+      // ✅ 初始化 dropdown
+      const dropdownBtn = li.querySelector(".dropdown-toggle");
+      if (dropdownBtn) new bootstrap.Dropdown(dropdownBtn);
     });
 
+    // ✅ 搜尋篩選
     document.getElementById("historySearchInput").addEventListener("input", e => {
       const keyword = e.target.value.trim().toLowerCase();
       const items = document.querySelectorAll("#historyListUI li");
@@ -319,17 +329,11 @@ document.getElementById("showHistoryBtn").addEventListener("click", async () => 
       });
     });
 
-
   } catch (err) {
     listUI.innerHTML = `<li class="list-group-item text-danger">❌ 載入失敗</li>`;
     console.error("[載入歷史錯誤]", err);
   }
 });
-
-
-
-
-
 
 
 

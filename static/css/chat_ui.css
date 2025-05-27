@@ -188,8 +188,9 @@ button[type="submit"] {
   color: #333;
   border-right: 1px solid #ccc;
   padding: 16px 12px;
-  min-width: 260px;
+  min-width: 320px;
   transition: background-color 0.3s ease, color 0.3s ease;
+  
 }
 
 #chatHistorySidebar h5 {
@@ -393,4 +394,32 @@ body.dark-mode .styled-search::placeholder {
 body.dark-mode .styled-search:focus {
   border-color: #63b3ed;
   box-shadow: 0 0 6px rgba(99, 179, 237, 0.4);
+}
+
+
+.list-group-item .dropdown {
+  visibility: hidden;
+}
+.list-group-item:hover .dropdown {
+  visibility: visible;
+}
+
+.dropdown-menu {
+  position: absolute !important;
+  z-index: 9999 !important;
+  inset: auto !important;
+
+  /* 上移選單 */
+  transform: translateY(-10px);
+
+  /* ✅ 先不要用 opacity/visibility，直接用 Bootstrap 預設的 toggle 顯示方式 */
+  margin-top: 0 !important;
+}
+
+
+#chatHistorySidebar,
+#historyListUI,
+#historyListUI .list-group-item {
+  overflow: visible !important;
+  position: relative;
 }
