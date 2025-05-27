@@ -809,7 +809,8 @@ function navigateTo(id) {
 // 導航到不同的頁面，若知識庫建立中則中止跳轉
 function navigateTo1(page) {
   if (window.kbLocked) {
-    alert("⚠️ 正在建置知識庫，請稍候完成後再切換頁面！");
+const modal = new bootstrap.Modal(document.getElementById('kbLockModal'));
+modal.show();
     return;
   }
 

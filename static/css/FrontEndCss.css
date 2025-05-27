@@ -1002,5 +1002,20 @@ body.dark-mode #kbModalContent .btn:hover {
 
 
 
+/* ✅ Modal 深色模式樣式 */
+body.dark-mode #kbLockModalContent {
+  background-color: #2b2b2b;
+  color: #f1f1f1;
+}
+
+body.dark-mode #kbLockModalContent .btn-secondary {
+  background-color: #444;
+  border-color: #666;
+  color: #fff;
+}
+
+body.dark-mode #kbLockModalContent .text-muted {
+  color: #ccc !important;
+}
 
 
