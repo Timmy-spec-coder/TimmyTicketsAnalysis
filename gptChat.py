@@ -263,7 +263,7 @@ def analyze_field_query(message):
         if not matches:
             return f"🔍 No results found for: " + " AND ".join([f"{f}={v}" for f, v in filters])
 
-        lines = [f"- {item.get('text', '')[:100]}..." for item in matches[:5]]
+        lines = [f"- {item.get('text', '')}" for item in matches[:5]]
         return (
             f"🔎 Top matches for:\n" +
             "\n".join([f"• {f} = {v}" for f, v in filters]) +
