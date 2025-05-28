@@ -201,7 +201,7 @@ def analyze_metadata_query(message):
             ["ollama", "run", "phi3:mini"],
             input=prompt.encode("utf-8"),
             capture_output=True,
-            timeout=30
+            timeout=600
         )
         print(f"🔚 模型回傳碼：{result.returncode}")
         raw = result.stdout.decode("utf-8").strip()
@@ -213,7 +213,7 @@ def analyze_metadata_query(message):
             if "\n" in raw:
                 raw = "\n".join(raw.split("\n")[1:-1])
 
-        field = raw.strip()
+        field = raw.strip().strip('"').strip("'")  # 強化：去除空白、前後引號
         print(f"[欄位判斷] GPT 回覆欄位：{field}")
 
         if field == "__fallback__":
@@ -279,7 +279,7 @@ def list_field_values(message):
             ["ollama", "run", "phi3:mini"],
             input=prompt.encode("utf-8"),
             capture_output=True,
-            timeout=30
+            timeout=600
         )
 
         raw_reply = result.stdout.decode("utf-8").strip()
@@ -344,7 +344,7 @@ def analyze_field_query(message):
             ["ollama", "run", "phi3:mini"],
             input=prompt.encode("utf-8"),
             capture_output=True,
-            timeout=30
+            timeout=600
         )
         raw = result.stdout.decode("utf-8").strip()
         print("[🔍 多欄位查詢原始回覆]", raw)
@@ -405,9 +405,12 @@ def analyze_temporal_trend(message):
     print("📈 啟動時間趨勢分析...")
     print(f"📝 使用者輸入：{message}")
 
+
     try:
         with open("kb_metadata.json", encoding="utf-8") as f:
             metadata = json.load(f)
+        print("📦 第一筆資料：", metadata[0])
+        print("🔍 是否有 analysisTime 欄位：", "analysisTime" in metadata[0])
         print(f"📂 成功載入 metadata，總筆數：{len(metadata)}")
     except Exception as e:
         print(f"❌ metadata 載入失敗：{str(e)}")
@@ -572,7 +575,7 @@ def handle_follow_up(chat_id, message):
                 ["ollama", "run", "phi3:mini"],
                 input=prompt.encode("utf-8"),
                 capture_output=True,
-                timeout=30
+                timeout=600
             )
             raw_reply = result.stdout.decode("utf-8").strip()
             print(f"📥 GPT 回覆：{raw_reply}")
@@ -658,7 +661,7 @@ def summarize_solutions(message):
             ["ollama", "run", "phi4"],
             input=prompt.encode("utf-8"),
             capture_output=True,
-            timeout=60
+            timeout=600
         )
         output = result.stdout.decode("utf-8").strip()
         print("✅ 模型成功回應（前 200 字）：")
