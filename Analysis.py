@@ -517,7 +517,7 @@ async def analyze_row_async(row, idx, df, weights, component_counts, configurati
             'riskLevel': risk_level,
             'solution': safe_value(ai_suggestion or '無提供解法'),
             'location': safe_value(row.get('Location')),
-            'opened': safe_value(row.get('Opened')),  # ✅ 新增這行
+            'opened': row.get('Opened'),  # ✅ 新增這行
             'analysisTime': analysis_time,
             'weights': {k: round(v / 10, 2) for k, v in weights.items()},
             'usedResolutionInput': safe_value(resolution_text),
@@ -1028,6 +1028,18 @@ def upload_file():
         print(f"❌ 分析時發生錯誤：{e}")
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+    
+
+
+def make_json_serializable(obj):
+    if isinstance(obj, pd.Timestamp):
+        return obj.isoformat()
+    if isinstance(obj, dict):
+        return {k: make_json_serializable(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [make_json_serializable(v) for v in obj]
+    return obj
+
 
     
     
@@ -1039,7 +1051,7 @@ def save_analysis_files(result, uid):
     json_path = os.path.join(basedir, 'json_data', f"{uid}.json")
     print(f"📝 預計儲存 JSON：{json_path}")
     with open(json_path, 'w', encoding='utf-8') as f:
-        json.dump(result, f, ensure_ascii=False, indent=2)
+        json.dump(make_json_serializable(result), f, ensure_ascii=False, indent=2)
     print("✅ JSON 檔案已寫入成功")
 
     # 儲存分析報表 Excel（只儲存 result['data']）
