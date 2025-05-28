@@ -295,6 +295,10 @@ document.getElementById("chatForm").addEventListener("submit", async (e) => {
         hideModal();
         window.onbeforeunload = null;
         window.kbLocked = false;
+
+        // ✅ 顯示成功提示 Modal
+const successModal = new bootstrap.Modal(document.getElementById("chatSuccessModal"));
+successModal.show();
         return;
       }
 
