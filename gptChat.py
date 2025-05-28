@@ -44,7 +44,7 @@ def summarize_retrieved_kb(retrieved, model="phi4-mini"):
             ["ollama", "run", model],
             input=prompt.encode("utf-8"),
             capture_output=True,
-            timeout=60
+            timeout=600
         )
 
         if result.returncode != 0:
@@ -74,6 +74,7 @@ def search_knowledge_base(query, top_k=3):
 # ----------- 提問類型分類 -----------
 def classify_query_type(message):
     print("🤖 判斷提問類型...")
+
     system_prompt = (
         "You are a classification assistant. Based on the user's question, determine whether it belongs to one of the following types:\n"
         "1. Semantic Query (user wants similar past cases or issue solving)\n"
@@ -86,37 +87,53 @@ def classify_query_type(message):
     )
     prompt = f"{system_prompt}\n\nUser: {message}"
 
-    try:
-        result = subprocess.run(
-            ["ollama", "run", "phi3:mini"],
-            input=prompt.encode("utf-8"),
-            capture_output=True,
-            timeout=600
-        )
-        reply = result.stdout.decode("utf-8").strip()
-        print(f"[分類判斷] 📥 回覆：{reply}")
+    def try_model(model_name, timeout_sec):
+        try:
+            print(f"🧠 嘗試使用模型：{model_name}（timeout={timeout_sec}s）")
+            result = subprocess.run(
+                ["ollama", "run", model_name],
+                input=prompt.encode("utf-8"),
+                capture_output=True,
+                timeout=timeout_sec
+            )
+            if result.returncode != 0:
+                print(f"⚠️ 模型 {model_name} 執行失敗：{result.stderr.decode('utf-8')}")
+                return None
+            reply = result.stdout.decode("utf-8").strip()
+            print(f"[分類判斷] 📥 回覆：{reply}")
+            return reply
+        except subprocess.TimeoutExpired:
+            print(f"⏰ 模型 {model_name} 超時（超過 {timeout_sec} 秒）")
+            return None
+        except Exception as e:
+            print(f"❌ 模型 {model_name} 錯誤：{str(e)}")
+            return None
 
-        # ✅ 關鍵字容錯判斷（可接收 GPT 輸出非標準格式）
-        if "Semantic Query" in reply:
-            return "Semantic Query"
-        if "Statistical Analysis" in reply:
-            return "Statistical Analysis"
-        if "Field Filter" in reply:
-            return "Field Filter"
-        if "Field Values" in reply:
-            return "Field Values"
-        if "Temporal Trend" in reply:
-            return "Temporal Trend"
-        if "Solution Summary" in reply:
-            return "Solution Summary"
+    # 🪂 嘗試模型判斷：phi4-mini → phi3:mini
+    reply = try_model("phi4-mini", timeout_sec=120)
+    if not reply:
+        reply = try_model("phi3:mini", timeout_sec=120)
 
-        print("⚠️ 無法解析類型，預設為 Semantic Query")
+    if not reply:
+        print("⚠️ 無法取得分類結果，預設為 Semantic Query")
         return "Semantic Query"
 
-    except Exception as e:
-        print(f"⚠️ 分類判斷失敗：{str(e)}")
+    # ✅ 關鍵字容錯判斷（可接收 GPT 輸出非標準格式）
+    if "Semantic Query" in reply:
         return "Semantic Query"
+    if "Statistical Analysis" in reply:
+        return "Statistical Analysis"
+    if "Field Filter" in reply:
+        return "Field Filter"
+    if "Field Values" in reply:
+        return "Field Values"
+    if "Temporal Trend" in reply:
+        return "Temporal Trend"
+    if "Solution Summary" in reply:
+        return "Solution Summary"
 
+    print("⚠️ 無法解析類型，預設為 Semantic Query")
+    return "Semantic Query"
 
 
 
@@ -138,7 +155,8 @@ def analyze_metadata_query(message):
         "From the user's question, choose ONE of the following fields to do statistical aggregation:\n"
         " - subcategory\n - configurationItem\n - roleComponent\n - location\n"
         "If the request is vague or unclear, respond with '__fallback__'.\n"
-        "Only return one word: the field name or '__fallback__'."
+        "Only return one word: the field name or '__fallback__'.\n"
+        "⚠️ Do not return any explanation or code block. Just the field name."
     )
     prompt = f"{system_prompt}\n\nUser: {message}"
 
@@ -149,7 +167,15 @@ def analyze_metadata_query(message):
             capture_output=True,
             timeout=30
         )
-        field = result.stdout.decode("utf-8").strip()
+        raw = result.stdout.decode("utf-8").strip()
+
+        # ✅ 移除 ```json 或其他 markdown 包裹
+        if raw.startswith("```"):
+            raw = raw.strip("`").strip()
+            if "\n" in raw:
+                raw = "\n".join(raw.split("\n")[1:-1])
+
+        field = raw.strip()
         print(f"[欄位判斷] GPT 回覆欄位：{field}")
 
         if field == "__fallback__":
@@ -176,6 +202,9 @@ def summarize_field(field, metadata):
     result_lines = [f"{i+1}. {k}：{v} 筆" for i, (k, v) in enumerate(sorted_counts[:5])]
     return f"📊 統計結果（依 {field}）：\n" + "\n".join(result_lines)
 
+
+
+# ----------- 欄位值清單查詢 -----------
 def list_field_values(message):
     try:
         with open("kb_metadata.json", encoding="utf-8") as f:
