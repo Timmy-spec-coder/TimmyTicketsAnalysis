@@ -95,12 +95,38 @@ chatInput.addEventListener("keydown", (e) => {
 
 
 
+
+let isTyping = false;
+let typingInterval = null;
+let tempReply = "";  // 用來暫時儲存回應文字
+
 document.getElementById("chatForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const input = document.getElementById("chatInput");
   const msg = input.value.trim();
-  if (!msg) return;
-    // 🛡️ 若建置中，直接擋掉提問
+  const submitBtn = document.getElementById("submitBtn");
+
+  // 禁用送出按鈕，並顯示「請稍候...」
+  submitBtn.disabled = true;
+  submitBtn.innerText = "⏳ 請稍候...";
+
+  // 如果正在打字並且有進行逐字顯示，允許按鈕變為「暫停」
+  if (isTyping && typingInterval) {
+    clearInterval(typingInterval);
+    isTyping = false;
+    submitBtn.disabled = false;  // 恢復按鈕
+    submitBtn.innerText = "送出";
+
+    // ✅ 補：將目前輸出回寫（中斷時也看到目前輸出內容）
+    const contentSpan = document.querySelector("#typingContent");
+    if (contentSpan) contentSpan.innerHTML = renderMessage(tempReply);
+
+    return;
+  }
+
+  if (!msg) return;  // 若訊息為空，跳出
+
+  // 檢查是否正在建立知識庫，若是則顯示提示並跳出
   if (window.kbBuilding) {
     const box = document.getElementById("chatBox");
     const div = document.createElement("div");
@@ -108,65 +134,59 @@ document.getElementById("chatForm").addEventListener("submit", async (e) => {
     div.innerHTML = `🤖 資料庫正在建置中，暫時無法回答問題，請稍後再試。`;
     box.appendChild(div);
     scrollToBottom();
+    submitBtn.disabled = false;  // 恢復按鈕
+    submitBtn.innerText = "送出";
     return;
   }
-
 
   const box = document.getElementById("chatBox");
   const timestamp = new Date().toLocaleTimeString();
   const model = document.getElementById("modelSelect")?.value || "mistral";
 
+  // 顯示使用者訊息
   const userMsg = document.createElement("div");
   userMsg.className = "msg user";
   userMsg.innerHTML = `👤 ${msg}<span class="timestamp">${timestamp}</span>`;
   box.appendChild(userMsg);
-  input.value = "";
+  input.value = ""; // 清空輸入框
 
+  // 顯示輸入的打字指示器
   const typingIndicator = document.createElement("div");
   typingIndicator.className = "msg bot";
   typingIndicator.innerHTML = `<div class="typing-indicator"><span></span><span></span><span></span></div>`;
   box.appendChild(typingIndicator);
-scrollToBottom();
+  scrollToBottom();
 
+  // 將訊息推送到歷史記錄
   chatHistory.push({ role: "user", content: msg });
 
+  // 設定按鈕為暫停，開始逐字顯示
+  isTyping = true;
+
   try {
-
-
     const chatId = localStorage.getItem("currentChatId");
 
     const payload = {
-    message: msg,
-    model,
-    history: chatHistory,
-    chatId: chatId
-  };
+      message: msg,
+      model,
+      history: chatHistory,
+      chatId: chatId
+    };
 
-  console.log("[🚀 發送訊息 Payload]", payload); // ✅ 新增這行
+    console.log("[🚀 發送訊息 Payload]", payload);
 
     const res = await fetch("/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: msg,
-        model,
-        history: chatHistory,
-        chatId: chatId
-      })
+      body: JSON.stringify(payload)
     });
 
-
-
-
     const data = await res.json();
-    typingIndicator.remove();
+    typingIndicator.remove(); // 移除打字指示器
 
-    const reply = data.reply || data.error || "⚠️ 回應失敗";
-
-
-
-
-
+    // 確保有收到回應，沒有則顯示錯誤訊息
+    console.log("🧠 GPT 回傳內容：", data);
+    const reply = (data && data.reply) || data.error || "⚠️ 回應失敗";
 
     const botMsg = document.createElement("div");
     botMsg.className = "msg bot";
@@ -174,57 +194,52 @@ scrollToBottom();
     box.appendChild(botMsg);
 
     const contentSpan = botMsg.querySelector("#typingContent");
-    const finalReply = renderMessage(reply);  // 支援換行與程式碼區塊等
-    const finalChars = Array.from(finalReply); // 防止破壞 HTML 結構（支援 emoji、中文、特殊字）
+    const finalReply = renderMessage(reply); // 將回應格式化
+    const finalChars = Array.from(finalReply); // 轉成字符陣列
 
     let i = 0;
+    tempReply = ""; // 每次都重置 tempReply
 
+    // ⏸️ 設定為正在輸出狀態
+    console.log("⏳ 準備輸出逐字回覆...");
 
-let tempReply = "";  // 暫存純文字
+    typingInterval = setInterval(() => {
+      if (i >= finalChars.length) {
+        // 當完成所有文字後，停止打字效果，顯示完整內容並變回送出
+        clearInterval(typingInterval);
+        isTyping = false;
+        submitBtn.disabled = false;  // 恢復按鈕
+        submitBtn.innerText = "送出"; // 輸出完成後，按鈕變回「送出」
 
-const typingInterval = setInterval(() => {
-  if (i >= finalChars.length) {
-    clearInterval(typingInterval);
+        contentSpan.innerHTML = renderMessage(tempReply); // 顯示完整答案
+        const assistantReply = { role: "assistant", content: reply };
+        chatHistory.push(assistantReply); // 把回覆加入歷史記錄
+        localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
+        scrollToBottom(); // 滾動到底部
+        return;
+      }
 
-    // ✅ 打字完畢才套用 renderMessage() 美化
-    contentSpan.innerHTML = renderMessage(tempReply);
+      // 逐字顯示回覆
+      tempReply += finalChars[i++];
+      contentSpan.textContent = tempReply;
+      scrollToBottom(); // 滾動到底部，讓新消息顯示出來
+    }, 5); // 每 5 毫秒顯示一個字符
 
-    const assistantReply = { role: "assistant", content: reply };
-    chatHistory.push(assistantReply);
     localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
-
-    scrollToBottom();
-    return;
-  }
-
-  tempReply += finalChars[i++];
-  contentSpan.textContent = tempReply;  // ⚠️ 逐字用 textContent 保留純文字
-  scrollToBottom();
-}, 20);
-
-
-
-
-    localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
-
-// ✅ 強制刷新側邊欄（如果歷史區塊是開的）
-const showBtn = document.getElementById("showHistoryBtn");
-const historyWrapper = document.getElementById("chatHistoryList");
-
-if (showBtn && historyWrapper && historyWrapper.style.display !== "none") {
-  showBtn.click(); // 關閉
-  setTimeout(() => showBtn.click(), 200); // 展開刷新
-}
-
 
   } catch (err) {
-    typingIndicator.remove();
+    typingIndicator.remove(); // 出錯時移除打字指示器
     const errorMsg = document.createElement("div");
     errorMsg.className = "msg bot";
     errorMsg.textContent = `⚠️ 錯誤：${err.message}`;
     box.appendChild(errorMsg);
+    isTyping = false;
+    submitBtn.disabled = false;  // 恢復按鈕
+    submitBtn.innerText = "送出"; // 若出錯，恢復按鈕為「送出」
   }
 });
+
+
 
 
 
