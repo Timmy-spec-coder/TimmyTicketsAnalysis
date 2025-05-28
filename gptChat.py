@@ -336,7 +336,10 @@ def analyze_field_query(message):
 
     # ✅ 取得合法值清單（限制模型輸出）
     allowed_fields = ["configurationItem", "subcategory", "roleComponent", "location"]
-    valid_values = {field: sorted(set(str(item.get(field, "")).strip()) for item in metadata) for field in allowed_fields}
+    valid_values = {
+        field: sorted(set(str(item.get(field, "")).strip() for item in metadata if item.get(field)))
+        for field in allowed_fields
+    }
     value_hint = "\n".join([f"{field}: {valid_values[field]}" for field in allowed_fields])
 
     system_prompt = (
@@ -364,7 +367,7 @@ def analyze_field_query(message):
         raw = result.stdout.decode("utf-8").strip()
         print("[🔍 多欄位查詢原始回覆]", raw)
 
-        # ✅ 去除 markdown 包裹與標籤干擾
+    # ✅ 去除 markdown 包裹與標籤干擾
         if "```" in raw:
             print("⚠️ 偵測到 markdown 格式，正在清理...")
             raw = raw.split("```")[1].strip()
@@ -373,12 +376,19 @@ def analyze_field_query(message):
 
         print("📥 清理後的 JSON 字串：", raw)
 
+        # ✅ 嘗試從原始字串中擷取合法 JSON 陣列
         match = re.search(r'\[\s*{.*?}\s*\]', raw, re.DOTALL)
         if not match:
             return "⚠️ Failed to extract valid JSON array from model output."
         json_part = match.group(0)
-        parsed_conditions = json.loads(json_part)
-        print(f"✅ 成功解析為 JSON 陣列，共 {len(parsed_conditions)} 筆條件")
+
+        try:
+            parsed_conditions = json.loads(json_part)
+            print(f"✅ 成功解析為 JSON 陣列，共 {len(parsed_conditions)} 筆條件")
+        except Exception as e:
+            print(f"❌ JSON 解析失敗：{e}")
+            return f"⚠️ JSON decode error: {str(e)}"
+
 
         if not isinstance(parsed_conditions, list):
             print("❌ 解析結果非 list 格式")
@@ -412,12 +422,25 @@ def analyze_field_query(message):
             return f"🔍 No results found for: " + " AND ".join([f"{f}={v}" for f, v in filters])
 
         lines = [f"- {item.get('text', '')[:500]}" for item in matches[:5]]
+        # 🔁 從 matches 中取出實際命中的原始值
+        actual_values = {field: set() for field, _ in filters}
+        for item in matches:
+            for field, _ in filters:
+                val = item.get(field, "").strip()
+                if val:
+                    actual_values[field].add(val)
+
+        summary_lines = [
+            f"• {field} = {', '.join(sorted(actual_values[field])) or 'N/A'}"
+            for field in actual_values
+        ]
+
         return (
-            f"🔎 Top matches for:\n" +
-            "\n".join([f"• {f} = {v}" for f, v in filters]) +
+            "🔎 Top matches for:\n" +
+            "\n".join(summary_lines) +
             "\n\n" + "\n".join(lines)
         )
-
+    
     except Exception as e:
         print(f"❌ 呼叫模型或解析過程出錯：{str(e)}")
         return f"⚠️ Failed to parse or search: {str(e)}"
