@@ -313,8 +313,7 @@ def list_field_values(message):
 
 
 # ----------- 欄位查詢分析 -----------
-import subprocess
-import json
+
 
 def analyze_field_query(message):
     print("🔍 啟動多欄位條件查詢分析...")
@@ -333,8 +332,10 @@ def analyze_field_query(message):
         "Only include fields: configurationItem, subcategory, roleComponent, location.\n"
         "Return ONLY a raw JSON array like:\n"
         '[{"field": "subcategory", "value": "Login/Access"}, {"field": "location", "value": "Taipei"}]\n'
-        "Do not include any explanation or markdown formatting."
+        "Do not include any explanation or markdown formatting.\n"
+        "The entire output must be a compact JSON array and must not exceed 500 characters in total."
     )
+
     prompt = f"{system_prompt}\n\nUser: {message}"
     print(f"📤 發送給模型的 prompt：\n{prompt}")
 
@@ -386,7 +387,7 @@ def analyze_field_query(message):
             print("📭 查無結果")
             return f"🔍 No results found for: " + " AND ".join([f"{f}={v}" for f, v in filters])
 
-        lines = [f"- {item.get('text', '')[:100]}..." for item in matches[:5]]
+        lines = [f"- {item.get('text', '')[:500]}" for item in matches[:5]]
         return (
             f"🔎 Top matches for:\n" +
             "\n".join([f"• {f} = {v}" for f, v in filters]) +
@@ -554,8 +555,10 @@ def handle_follow_up(chat_id, message):
 
         new_filter_prompt = (
             "You are a filter parser. Based on this message, extract an additional field and value to add as a filter.\n"
-            "Return JSON like: {\"field\": \"subcategory\", \"value\": \"Crash\"}"
+            "Return JSON like: {\"field\": \"subcategory\", \"value\": \"Crash\"}\n"
+            "The entire response must be in compact JSON format and must not exceed 500 characters."
         )
+
         prompt = f"{new_filter_prompt}\n\nUser: {message}"
         print("📤 發送給模型的延伸過濾 prompt：")
         print(prompt)
@@ -592,7 +595,7 @@ def handle_follow_up(chat_id, message):
                 matches = [m for m in matches if m.get(f["field"]) == f["value"]]
             print(f"📊 符合條件筆數：{len(matches)}")
 
-            lines = [f"- {item.get('text', '')[:100]}..." for item in matches[:5]]
+            lines = [f"- {item.get('text', '')[:500]}" for item in matches[:5]]
             return f"🔎 延伸查詢結果（共 {len(matches)} 筆）：\n" + "\n".join(lines)
 
         except Exception as e:
