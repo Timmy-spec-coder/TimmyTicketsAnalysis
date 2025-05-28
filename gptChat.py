@@ -411,6 +411,7 @@ def analyze_temporal_trend(message):
             metadata = json.load(f)
         print("📦 第一筆資料：", metadata[0])
         print("🔍 是否有 analysisTime 欄位：", "analysisTime" in metadata[0])
+
         print(f"📂 成功載入 metadata，總筆數：{len(metadata)}")
     except Exception as e:
         print(f"❌ metadata 載入失敗：{str(e)}")

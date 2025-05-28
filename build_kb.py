@@ -68,6 +68,7 @@ def extract_texts_and_metadata(json_file):
             role = item.get("roleComponent") or "未指定元件"
             sub = item.get("subcategory") or "未分類"
             loc = item.get("location") or "未提供"
+            jso = item.get("analysisTime") or "時間未填入"
             text = f"""事件類別：{sub}｜模組：{ci}｜角色：{role}\n地點：{loc}\n問題描述：{summary}\n處理方式：{solution}"""
             kb_texts.append(text)
             metadata.append({
@@ -75,7 +76,8 @@ def extract_texts_and_metadata(json_file):
                 "subcategory": sub,
                 "configurationItem": ci,
                 "roleComponent": role,
-                "location": loc
+                "location": loc,
+                "analysisTime": jso
             })
         return kb_texts, metadata
 
