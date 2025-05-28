@@ -405,13 +405,11 @@ def analyze_temporal_trend(message):
     print("📈 啟動時間趨勢分析...")
     print(f"📝 使用者輸入：{message}")
 
-
     try:
         with open("kb_metadata.json", encoding="utf-8") as f:
             metadata = json.load(f)
         print("📦 第一筆資料：", metadata[0])
         print("🔍 是否有 analysisTime 欄位：", "analysisTime" in metadata[0])
-
         print(f"📂 成功載入 metadata，總筆數：{len(metadata)}")
     except Exception as e:
         print(f"❌ metadata 載入失敗：{str(e)}")
@@ -441,22 +439,14 @@ def analyze_temporal_trend(message):
     for month, count in trend.items():
         print(f"  • {month}: {count} 筆")
 
-    print("🎨 產生圖表中...")
-    plt.figure(figsize=(8, 4))
-    trend.plot(kind="line", marker="o")
-    plt.title("📈 趨勢圖：每月案件數")
-    plt.xlabel("月份")
-    plt.ylabel("案件數量")
-    plt.tight_layout()
+    # ✅ 用文字敘述每月趨勢
+    summary_lines = ["📊 每月案件趨勢："]
+    for month, count in trend.items():
+        summary_lines.append(f"- {month.strftime('%Y-%m')}: {count} 筆")
+    print("✅ 已轉換為純文字描述")
 
-    buf = io.BytesIO()
-    plt.savefig(buf, format="png")
-    buf.seek(0)
-    img_base64 = base64.b64encode(buf.read()).decode("utf-8")
-    plt.close()
-    print("✅ 趨勢圖轉換為 base64 成功")
+    return "\n".join(summary_lines)
 
-    return f"<img src='data:image/png;base64,{img_base64}' alt='Trend chart'>"
 
 
 

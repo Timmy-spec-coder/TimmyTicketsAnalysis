@@ -7,7 +7,8 @@ from tqdm import tqdm
 from sentence_transformers import SentenceTransformer
 import numpy as np
 from datetime import datetime
-
+from dateutil.parser import parse
+# ========== ✅ 檢查環境與依賴 ==========
 print("✅ [DEBUG] 你有成功呼叫 build_kb.py")
 
 # ========== ✅ 加入 log 與鎖定檢查 ==========
@@ -20,6 +21,15 @@ KB_METADATA = "kb_metadata.json"
 PROCESSED_LOG = "processed_files.json"
 DATA_DIR = "json_data"
 MODEL_NAME = "all-MiniLM-L6-v2"
+
+
+
+def fix_datetime(value):
+    try:
+        # 嘗試轉為 datetime 物件，並轉成 ISO 格式字串
+        return parse(value).isoformat()
+    except Exception:
+        return "時間未填入"
 
 def log(msg):
     with open(LOG_FILE, "a", encoding="utf-8") as f:
@@ -68,7 +78,8 @@ def extract_texts_and_metadata(json_file):
             role = item.get("roleComponent") or "未指定元件"
             sub = item.get("subcategory") or "未分類"
             loc = item.get("location") or "未提供"
-            jso = item.get("analysisTime") or "時間未填入"
+            open_raw = item.get("opened") or "時間未填入"
+            open_time = fix_datetime(open_raw)
             text = f"""事件類別：{sub}｜模組：{ci}｜角色：{role}\n地點：{loc}\n問題描述：{summary}\n處理方式：{solution}"""
             kb_texts.append(text)
             metadata.append({
@@ -77,7 +88,7 @@ def extract_texts_and_metadata(json_file):
                 "configurationItem": ci,
                 "roleComponent": role,
                 "location": loc,
-                "analysisTime": jso
+                "analysisTime": open_time,
             })
         return kb_texts, metadata
 
