@@ -190,7 +190,7 @@ def analyze_metadata_query(message):
         " - subcategory\n - configurationItem\n - roleComponent\n - location\n"
         "If the request is vague or unclear, respond with '__fallback__'.\n"
         "Only return one word: the field name or '__fallback__'.\n"
-        "⚠️ Do not return any explanation or code block. Just the field name."
+        "Do not return any explanation or code block. Just the field name."
     )
     prompt = f"{system_prompt}\n\nUser: {message}"
     print(f"📤 發送給模型的 prompt：\n{prompt}")
@@ -213,8 +213,10 @@ def analyze_metadata_query(message):
             if "\n" in raw:
                 raw = "\n".join(raw.split("\n")[1:-1])
 
-        field = raw.strip().strip('"').strip("'")  # 強化：去除空白、前後引號
+        field = raw.strip().strip('"').strip("'").lower()  # ✅ 標準化字串
         print(f"[欄位判斷] GPT 回覆欄位：{field}")
+
+        allowed_fields = {"subcategory", "configurationItem", "roleComponent", "location"}
 
         if field == "__fallback__":
             print("🔁 回傳 fallback，改為列出 subcategory 和 configurationItem 統計")
@@ -223,7 +225,7 @@ def analyze_metadata_query(message):
                 summarize_field("configurationItem", metadata)
             ])
 
-        if field not in ["subcategory", "configurationItem", "roleComponent", "location"]:
+        if field not in allowed_fields:
             print("⚠️ 模型回傳不在允許欄位中")
             return f"⚠️ 無法判斷要統計的欄位（回覆為：{field}）"
 
@@ -235,6 +237,10 @@ def analyze_metadata_query(message):
         return f"⚠️ 呼叫模型分類欄位時出錯：{str(e)}"
 
 
+
+
+
+# ----------- 統計欄位值 -----------
 def summarize_field(field, metadata):
     print(f"📊 開始統計欄位：{field}")
     counts = {}
