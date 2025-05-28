@@ -7,8 +7,10 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 import pandas as pd
 import matplotlib.pyplot as plt
+import re
 import io
 import base64
+
 
 
 # ----------- 知識庫向量載入與檢索 -----------
@@ -320,7 +322,6 @@ def list_field_values(message):
 
 # ----------- 欄位查詢分析 -----------
 
-
 def analyze_field_query(message):
     print("🔍 啟動多欄位條件查詢分析...")
     print(f"📝 使用者輸入：{message}")
@@ -333,9 +334,16 @@ def analyze_field_query(message):
         print(f"❌ metadata 載入失敗：{str(e)}")
         return f"⚠️ Failed to load metadata: {str(e)}"
 
+    # ✅ 取得合法值清單（限制模型輸出）
+    allowed_fields = ["configurationItem", "subcategory", "roleComponent", "location"]
+    valid_values = {field: sorted(set(str(item.get(field, "")).strip()) for item in metadata) for field in allowed_fields}
+    value_hint = "\n".join([f"{field}: {valid_values[field]}" for field in allowed_fields])
+
     system_prompt = (
         "You are a parser. Extract all field=value conditions from the user's message for filtering.\n"
         "Only include fields: configurationItem, subcategory, roleComponent, location.\n"
+        "Use only values from these lists:\n"
+        f"{value_hint}\n"
         "Return ONLY a raw JSON array like:\n"
         '[{"field": "subcategory", "value": "Login/Access"}, {"field": "location", "value": "Taipei"}]\n'
         "Do not include any explanation or markdown formatting.\n"
@@ -364,14 +372,18 @@ def analyze_field_query(message):
             raw = raw[len("json"):].strip()
 
         print("📥 清理後的 JSON 字串：", raw)
-        parsed_conditions = json.loads(raw)
+
+        match = re.search(r'\[\s*{.*?}\s*\]', raw, re.DOTALL)
+        if not match:
+            return "⚠️ Failed to extract valid JSON array from model output."
+        json_part = match.group(0)
+        parsed_conditions = json.loads(json_part)
         print(f"✅ 成功解析為 JSON 陣列，共 {len(parsed_conditions)} 筆條件")
 
         if not isinstance(parsed_conditions, list):
             print("❌ 解析結果非 list 格式")
             return "⚠️ Invalid parsed result format (not a list)."
 
-        allowed_fields = ["configurationItem", "subcategory", "roleComponent", "location"]
         filters = [(c["field"], c["value"]) for c in parsed_conditions if c.get("field") in allowed_fields]
 
         print("🔎 過濾後的有效條件：")
@@ -382,19 +394,16 @@ def analyze_field_query(message):
             print("⚠️ 沒有擷取到有效條件")
             return "⚠️ No valid filters extracted from the query."
 
-        
         # 篩選資料（符合所有條件，大小寫不敏感，空白容錯）
         def match_all(item):
             for field, value in filters:
                 actual = str(item.get(field, "")).strip().lower()
                 expected = str(value).strip().lower()
-                if actual != expected:
+                if expected not in actual:  # ✅ 改為模糊比對
                     return False
             return True
 
         matches = [item for item in metadata if match_all(item)]
-
-
 
         print(f"📊 符合條件的結果筆數：{len(matches)}")
 
