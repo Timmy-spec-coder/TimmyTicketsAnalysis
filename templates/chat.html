@@ -30,22 +30,25 @@
 </div>
 
 
-<!-- Bootstrap Modal 結構 -->
-<div class="modal fade" id="kbLockModal" tabindex="-1" aria-labelledby="kbLockModalLabel" aria-hidden="true">
+<!-- ✅ Modal：資料處理中（含 spacing 微調） -->
+<div class="modal fade" id="kbLockModal" tabindex="-1"
+     data-bs-backdrop="static" data-bs-keyboard="false"
+     aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="kbLockModalLabel">資料處理中</h5>
-      </div>
-      <div class="modal-body">
-        資料正在處理中，請稍候完成後再進行操作。
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-light" id="closeModalBtn" data-bs-dismiss="modal">關閉</button>
+    <div class="modal-content shadow border-0 rounded-4 bg-dark text-light">
+      <div class="modal-body text-center p-5">
+        <div class="fs-1 mb-3">⏳</div>
+        <h4 id="kbLockModalBody" class="fw-bold mb-3">資料正在處理中，請稍候...</h4>
+        <button type="button" class="btn btn-outline-light px-4 mt-4" data-bs-dismiss="modal">我知道了</button>
       </div>
     </div>
   </div>
 </div>
+
+
+
+
+
 
 <!-- ✅ Modal：訊息發送成功提示 -->
 <div class="modal fade" id="chatSuccessModal" tabindex="-1" aria-labelledby="chatSuccessLabel" aria-hidden="true">

@@ -127,11 +127,11 @@ function navigateTo1(page) {
 
 
 
-
 function showModal(message) {
-  const label = document.getElementById("kbLockModalLabel");
-  if (label) label.textContent = message || "資料處理中...";
-  const modal = new bootstrap.Modal(document.getElementById("kbLockModal"));
+  const body = document.getElementById("kbLockModalBody");
+  if (body) body.textContent = message || "資料正在處理中，請稍候...";
+
+  const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById("kbLockModal"));
   modal.show();
 
   window.onbeforeunload = () => "資料正在處理中，確定要離開嗎？";
@@ -194,8 +194,7 @@ document.getElementById("chatForm").addEventListener("submit", async (e) => {
   // ✅ 啟用跳離提醒（關閉、刷新、F5）
   window.onbeforeunload = () => "資料正在處理中，確定要離開嗎？";
 
-  // ✅ 顯示處理中提示 Modal
-  showModal("資料正在處理中，請稍候...");
+ 
 
   // 如果正逐字顯示中，先中止並回寫現有內容
   if (isTyping && typingInterval) {
