@@ -382,11 +382,20 @@ def analyze_field_query(message):
             print("⚠️ 沒有擷取到有效條件")
             return "⚠️ No valid filters extracted from the query."
 
-        # 篩選資料（符合所有條件）
+        
+        # 篩選資料（符合所有條件，大小寫不敏感，空白容錯）
         def match_all(item):
-            return all(item.get(field) == value for field, value in filters)
+            for field, value in filters:
+                actual = str(item.get(field, "")).strip().lower()
+                expected = str(value).strip().lower()
+                if actual != expected:
+                    return False
+            return True
 
         matches = [item for item in metadata if match_all(item)]
+
+
+
         print(f"📊 符合條件的結果筆數：{len(matches)}")
 
         if not matches:
