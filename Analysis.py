@@ -1047,6 +1047,22 @@ def make_json_serializable(obj):
         return [make_json_serializable(v) for v in obj]
     return obj
 
+def default_value_for(field):
+    default_values = {
+        "id": "N/A",
+        "configurationItem": "Unknown",
+        "roleComponent": "Unknown",
+        "subcategory": "Unknown",
+        "problem": "（無原始描述）",
+        "solution": "（無原始描述）",
+        "severityScore": 0.0,
+        "frequencyScore": 0.0,
+        "impactScore": 0.0,
+        "riskLevel": "未知",
+        "location": "未填",
+        "opened": "1970-01-01T00:00:00"
+    }
+    return default_values.get(field, None)
 
     
     
@@ -1129,8 +1145,15 @@ def send_to_power_automate_from_file(json_path):
                 raw_data = json.load(f)
 
             filtered_data = []
-            for item in raw_data.get("data", []):
-                filtered_item = {new_k: item.get(old_k) for old_k, new_k in FIELD_MAPPING.items()}
+            for i, item in enumerate(raw_data.get("data", [])):
+                filtered_item = {}
+                for old_k, new_k in FIELD_MAPPING.items():
+                    if old_k in item:
+                        filtered_item[new_k] = item[old_k]
+                    else:
+                        default_val = default_value_for(new_k)
+                        print(f"⚠️ 第 {i+1} 筆資料欄位缺失：{old_k}（對應 {new_k}），已使用預設值：{default_val}")
+                        filtered_item[new_k] = default_val
                 filtered_data.append(filtered_item)
 
             payload = {
@@ -1138,7 +1161,7 @@ def send_to_power_automate_from_file(json_path):
                 "analysisTime": raw_data.get("analysisTime")
             }
             print("📤 正在送出以下 payload 給 Power Automate：")
-            print(json.dumps(payload, indent=2))
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
 
             headers = {"Content-Type": "application/json"}
             response = requests.post(FLOW_URL, headers=headers, json=payload, timeout=120)
