@@ -50,6 +50,11 @@ import requests
 import threading
 import json
 
+from jsonschema import validate, ValidationError
+
+
+
+
 KMEANS_MIN_COUNT = 4         # 最少資料筆數
 KMEANS_MIN_RANGE = 5.0       # 分數最大最小值差
 KMEANS_MIN_STDDEV = 3.0      # 標準差下限
@@ -1047,22 +1052,6 @@ def make_json_serializable(obj):
         return [make_json_serializable(v) for v in obj]
     return obj
 
-def default_value_for(field):
-    default_values = {
-        "id": "N/A",
-        "configurationItem": "Unknown",
-        "roleComponent": "Unknown",
-        "subcategory": "Unknown",
-        "problem": "（無原始描述）",
-        "solution": "（無原始描述）",
-        "severityScore": 0.0,
-        "frequencyScore": 0.0,
-        "impactScore": 0.0,
-        "riskLevel": "未知",
-        "location": "未填",
-        "opened": "1970-01-01T00:00:00"
-    }
-    return default_values.get(field, None)
 
     
     
@@ -1133,6 +1122,77 @@ FIELD_MAPPING = {
     "opened": "opened"
 }
 
+def default_value_for(field):
+    default_values = {
+        "id": "N/A",
+        "configurationItem": "Unknown",
+        "roleComponent": "Unknown",
+        "subcategory": "Unknown",
+        "problem": "（無原始描述）",
+        "solution": "（無原始描述）",
+        "severityScore": 0.0,
+        "frequencyScore": 0.0,
+        "impactScore": 0.0,
+        "riskLevel": "未知",
+        "location": "未填",
+        "opened": "1970-01-01T00:00:00"
+    }
+    return default_values.get(field, None)
+
+
+def enforce_schema_types(filtered_item):
+    for field in ["severityScore", "frequencyScore", "impactScore"]:
+        try:
+            filtered_item[field] = float(filtered_item.get(field, 0.0))
+        except:
+            filtered_item[field] = 0.0
+
+    for field in ["id", "configurationItem", "roleComponent", "subcategory",
+                  "problem", "solution", "riskLevel", "location", "opened"]:
+        val = filtered_item.get(field)
+        if val is not None:
+            filtered_item[field] = str(val)
+        else:
+            filtered_item[field] = default_value_for(field)
+
+
+
+
+
+# 🔒 加入你原始的 schema（放在程式開頭或一個變數中）
+SCHEMA = {
+    "type": "object",
+    "properties": {
+        "data": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "configurationItem": {"type": "string"},
+                    "roleComponent": {"type": "string"},
+                    "subcategory": {"type": "string"},
+                    "problem": {"type": "string"},
+                    "solution": {"type": "string"},
+                    "severityScore": {"type": "number"},
+                    "frequencyScore": {"type": "number"},
+                    "impactScore": {"type": "number"},
+                    "riskLevel": {"type": "string"},
+                    "location": {"type": "string"},
+                    "opened": {"type": "string"}
+                },
+                "required": [
+                    "id", "configurationItem", "roleComponent", "subcategory",
+                    "problem", "solution", "severityScore", "frequencyScore",
+                    "impactScore", "riskLevel", "location", "opened"
+                ]
+            }
+        },
+        "analysisTime": {"type": "string"}
+    },
+    "required": ["data", "analysisTime"]
+}
+
 
 def send_to_power_automate_from_file(json_path):
     if not os.path.exists(json_path):
@@ -1154,6 +1214,8 @@ def send_to_power_automate_from_file(json_path):
                         default_val = default_value_for(new_k)
                         print(f"⚠️ 第 {i+1} 筆資料欄位缺失：{old_k}（對應 {new_k}），已使用預設值：{default_val}")
                         filtered_item[new_k] = default_val
+
+                enforce_schema_types(filtered_item)  # ✅ 型別與預設值保護
                 filtered_data.append(filtered_item)
 
             payload = {
@@ -1162,6 +1224,22 @@ def send_to_power_automate_from_file(json_path):
             }
             print("📤 正在送出以下 payload 給 Power Automate：")
             print(json.dumps(payload, indent=2, ensure_ascii=False))
+
+
+
+
+
+            # 檢查 schema 是否符合
+            try:
+                validate(instance=payload, schema=SCHEMA)
+                print("✅ JSON payload 符合指定 schema，可以送出。")
+            except ValidationError as ve:
+                print("❌ JSON payload 不符合 schema！")
+                print("📍 錯誤位置：", ve.json_path)
+                print("📋 詳細錯誤：", ve.message)
+                print("📌 發生於 payload 第", i+1, "筆（可能）資料")
+                return
+
 
             headers = {"Content-Type": "application/json"}
             response = requests.post(FLOW_URL, headers=headers, json=payload, timeout=120)
@@ -1173,7 +1251,6 @@ def send_to_power_automate_from_file(json_path):
         except Exception as e:
             print(f"⚠️ 發送 Power Automate 時錯誤（忽略回應）：{e}")
 
-    # 用背景執行送出，主流程不會等回應
     threading.Thread(target=_post).start()
 
 
