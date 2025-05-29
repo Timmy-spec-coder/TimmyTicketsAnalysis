@@ -46,6 +46,9 @@ import time
 # --- 分群啟用條件（可依資料調整）---
 import asyncio
 import math
+import requests
+import threading
+import json
 
 KMEANS_MIN_COUNT = 4         # 最少資料筆數
 KMEANS_MIN_RANGE = 5.0       # 分數最大最小值差
@@ -79,7 +82,7 @@ os.makedirs(os.path.join(basedir, 'json_data'), exist_ok=True)
 os.makedirs(os.path.join(basedir, 'excel_result_Unclustered'), exist_ok=True)  # 新增未分群資料夾
 os.makedirs(os.path.join(basedir, 'excel_result_Clustered'), exist_ok=True) # 新增分群資料夾
 
-
+# ------------------------------------------------------------------------------
 
 # 判斷是否允許的檔案格式
 def allowed_file(filename):
@@ -943,6 +946,10 @@ def preview_excel():
 def ping():
     return "pong", 200
 
+
+
+
+
 @app.route('/upload', methods=['POST'])
 def upload_file():
     print("📥 收到上傳請求")
@@ -1073,10 +1080,78 @@ def save_analysis_files(result, uid):
     timestamp = uid.replace("result_", "")
     original_excel_path = os.path.abspath(os.path.join(basedir, 'uploads', f"original_{timestamp}.xlsx"))
 
+        # ✅ 自動送出到 Power Automate
+    try:
+        send_to_power_automate_from_file(json_path)
+        print("✅ 已自動送出到 Power Automate")
+    except Exception as e:
+        print(f"⚠️ 發送到 Power Automate 失敗：{e}")
+
+
     if os.path.exists(original_excel_path):
         print("📁 原始檔絕對路徑：", original_excel_path)
     else:
         print("⚠️ 找不到原始 Excel 路徑！")
+
+
+
+# ✅ Power Automate 的 URL（請換成你自己的）
+FLOW_URL = "https://prod-01.southeastasia.logic.azure.com:443/workflows/0d3ab543082e4b6ea42c322afc3891e2/triggers/manual/paths/invoke?api-version=2016-06-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=arAYZX8JO4ZtNPMBpNpQMbD4hLYYFnpy1_9sG1chue0"
+
+# ✅ 欄位名稱對照：原始名稱 → 要送出的名稱
+FIELD_MAPPING = {
+    "id": "id",
+    "configurationItem": "configurationItem",
+    "roleComponent": "roleComponent",
+    "subcategory": "subcategory",
+    "aiSummary": "problem",  # ← 改這行
+    "solution": "solution",
+    "severityScore": "severityScore",
+    "frequencyScore": "frequencyScore",
+    "impactScore": "impactScore",
+    "severityScoreNorm": "severityScore",
+    "frequencyScoreNorm": "frequencyScore",
+    "impactScoreNorm": "impactScore",
+    "riskLevel": "riskLevel",
+    "location": "location",
+    "opened": "opened"
+}
+
+
+def send_to_power_automate_from_file(json_path):
+    if not os.path.exists(json_path):
+        print(f"❌ 找不到分析結果檔案：{json_path}")
+        return
+
+    def _post():
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                raw_data = json.load(f)
+
+            filtered_data = []
+            for item in raw_data.get("data", []):
+                filtered_item = {new_k: item.get(old_k) for old_k, new_k in FIELD_MAPPING.items()}
+                filtered_data.append(filtered_item)
+
+            payload = {
+                "data": filtered_data,
+                "analysisTime": raw_data.get("analysisTime")
+            }
+            print("📤 正在送出以下 payload 給 Power Automate：")
+            print(json.dumps(payload, indent=2))
+
+            headers = {"Content-Type": "application/json"}
+            response = requests.post(FLOW_URL, headers=headers, json=payload, timeout=120)
+
+            if response.status_code == 200:
+                print("✅ 成功送出資料給 Power Automate")
+            else:
+                print(f"⚠️ 已送出，但 HTTP 狀態：{response.status_code}")
+        except Exception as e:
+            print(f"⚠️ 發送 Power Automate 時錯誤（忽略回應）：{e}")
+
+    # 用背景執行送出，主流程不會等回應
+    threading.Thread(target=_post).start()
 
 
 
