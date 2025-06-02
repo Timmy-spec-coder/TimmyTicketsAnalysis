@@ -9,6 +9,7 @@ from collections import Counter
 import hashlib
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 import umap
 import hdbscan
@@ -1254,12 +1255,72 @@ def send_to_power_automate_from_file(json_path):
     threading.Thread(target=_post).start()
 
 
+    
+
+
+@app.route("/compare-file", methods=["POST"])
+def compare_file():
+    import os
+    import pandas as pd
+
+    uploaded_file = request.files.get("file")
+    if not uploaded_file:
+        print("❌ 沒有收到上傳的檔案")
+        return jsonify({"error": "No file uploaded"}), 400
+
+    try:
+        # ✅ 建立暫存資料夾
+        temp_dir = "tmp_upload"
+        os.makedirs(temp_dir, exist_ok=True)
+        print(f"📁 確保暫存資料夾存在：{temp_dir}")
+
+        # ✅ 儲存上傳檔案
+        temp_path = os.path.join(temp_dir, uploaded_file.filename)
+        uploaded_file.save(temp_path)
+        print(f"📄 已儲存上傳檔案至暫存：{temp_path}")
+
+        # ✅ 讀取上傳的檔案
+        df_new = pd.read_excel(temp_path)
+        print("📊 成功讀取上傳檔案為 DataFrame")
+
+        # ✅ 比對 uploads 中的檔案
+        uploads_dir = "uploads"
+        print(f"🔍 開始比對 uploads 資料夾內檔案，共 {len(os.listdir(uploads_dir))} 個")
+
+        for fname in os.listdir(uploads_dir):
+            fpath = os.path.join(uploads_dir, fname)
+            try:
+                df_existing = pd.read_excel(fpath)
+                print(f"📎 正在比對：{fname}")
+                if df_new.equals(df_existing):
+                    print(f"✅ 發現重複檔案：{fname}")
+                    os.remove(temp_path)
+                    print(f"🧹 已刪除暫存檔案：{temp_path}")
+                    return jsonify({"duplicate": True})
+            except Exception as ex:
+                print(f"⚠️ 無法讀取檔案 {fname}：{ex}")
+                continue
+
+        os.remove(temp_path)
+        print(f"🧹 比對完成，未發現重複。已刪除暫存檔案：{temp_path}")
+        return jsonify({"duplicate": False})
+
+    except Exception as e:
+        if 'temp_path' in locals() and os.path.exists(temp_path):
+            os.remove(temp_path)
+            print(f"❗發生錯誤，刪除暫存檔案：{temp_path}")
+        print(f"❌ 發生錯誤：{e}")
+        return jsonify({"error": str(e)}), 500
+
+
+
 
 @app.route('/kb-status')
 def kb_status():
     lock_exists = os.path.exists("kb_building.lock")
     print(f"[DEBUG] lock file exists? {lock_exists}")
     return jsonify({"building": lock_exists})
+
 
 
 

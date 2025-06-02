@@ -67,6 +67,29 @@
 </div>
 
 
+<!-- 📌 檔案重複確認 Modal -->
+<div class="modal fade" id="duplicateConfirmModal" tabindex="-1" aria-labelledby="duplicateModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg rounded-4">
+      <div class="modal-header bg-warning bg-opacity-75 text-dark">
+        <h5 class="modal-title fw-bold" id="duplicateModalLabel">⚠️ 檔案內容重複確認</h5>
+      </div>
+      <div class="modal-body fs-6 text-secondary">
+        <p class="mb-2">系統偵測到您上傳的檔案內容，<span class="fw-semibold text-dark">與資料庫中已有檔案完全一致</span>。</p>
+        <p class="mb-0">為避免重複分析，請確認是否仍要<strong class="text-danger">繼續上傳</strong>。</p>
+      </div>
+      <div class="modal-footer d-flex justify-content-between">
+        <button class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">取消</button>
+        <button class="btn btn-primary rounded-pill px-4" id="confirmUploadBtn">✅ 確認上傳</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+
 
 
 
