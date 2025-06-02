@@ -1255,14 +1255,12 @@ def send_to_power_automate_from_file(json_path):
     threading.Thread(target=_post).start()
 
 
-    
+
 
 
 @app.route("/compare-file", methods=["POST"])
 def compare_file():
-    import os
-    import pandas as pd
-
+    print("📥 收到檔案比對請求")
     uploaded_file = request.files.get("file")
     if not uploaded_file:
         print("❌ 沒有收到上傳的檔案")
