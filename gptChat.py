@@ -939,12 +939,19 @@ def run_sql(query):
 # ---------- 人類摘要 ----------
 def summarize_sql_result(df, max_rows=5):
     if df.empty:
-        return "📭 查無資料結果。"
+        return "📭 No data found."
 
-    summary = f"📊 查詢成功，總共 {len(df)} 筆資料。\n"
-    summary += f"📋 以下是前 {min(max_rows, len(df))} 筆資料預覽：\n"
+    preview_df = df.head(max_rows).copy()
 
-    preview = df.head(max_rows).to_string(index=False)
+    # 將文字欄位內的 \n 轉為實際換行
+    for col in preview_df.columns:
+        if preview_df[col].dtype == "object":
+            preview_df[col] = preview_df[col].astype(str).str.replace("\\n", "\n").str.slice(0, 200)
+
+    summary = f"📊 Query successful. Total {len(df)} records found.\n"
+    summary += f"📋 Preview of first {min(max_rows, len(df))} records:\n"
+    preview = preview_df.to_string(index=False)
+
     return summary + "```\n" + preview + "\n```"
 
 def estimate_tokens_per_row(df):
