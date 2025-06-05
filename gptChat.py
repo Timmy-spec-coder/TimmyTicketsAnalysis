@@ -245,12 +245,15 @@ def classify_query_type(message):
     print(f"📝 使用者輸入：{message}")
 
     system_prompt = (
-        "You are a classification assistant. Based on the user's question, determine whether it belongs to one of the following types:\n"
-        "1. Semantic Query (user wants similar past cases or issue solving)\n"
-        "2. Structured SQL (user wants structured data, including counts, filters, field values, temporal trends, or solution summaries)\n"
-        "Please respond with one of: 'Semantic Query' or 'Structured SQL'."
-
+        "You are a classification assistant. Your task is to analyze the user's question and classify it as one of the following two types:\n\n"
+        "1. Semantic Query – The user is seeking similar past incidents, solution suggestions, or insights based on previous case knowledge.\n"
+        "   Typical intents: find related issues, ask how a problem was resolved, request examples of solutions.\n\n"
+        "2. Structured SQL – The user is requesting structured or statistical data, such as record counts, field value filtering, time-based trends, or aggregated summaries.\n"
+        "   Typical intents: show number of records, list unique values, filter by conditions, summarize results over time.\n\n"
+        "Respond with exactly one of the following labels (no explanations):\n"
+        "'Semantic Query' or 'Structured SQL'."
     )
+
 
     prompt = f"{system_prompt}\n\nUser: {message}"
     print(f"📤 發送給模型的 prompt（前 300 字）：\n{prompt[:300]}{'...' if len(prompt) > 300 else ''}")
@@ -942,17 +945,26 @@ def summarize_sql_result(df, max_rows=5):
         return "📭 No data found."
 
     preview_df = df.head(max_rows).copy()
-
-    # 將文字欄位內的 \n 轉為實際換行
     for col in preview_df.columns:
         if preview_df[col].dtype == "object":
-            preview_df[col] = preview_df[col].astype(str).str.replace("\\n", "\n").str.slice(0, 200)
-
-    summary = f"📊 Query successful. Total {len(df)} records found.\n"
-    summary += f"📋 Preview of first {min(max_rows, len(df))} records:\n"
+            # 將字面上的 \n（\\n）轉為真正換行
+            preview_df[col] = (
+                preview_df[col]
+                .astype(str)
+                .str.replace(r'\\n', '\n')
+                .str.slice(0, 200)
+            )
+    summary = f"📊 Query successful. Total {len(df)} records found.<br>"
+    summary += f"📋 Preview of first {min(max_rows, len(df))} records:<br>"
     preview = preview_df.to_string(index=False)
-
+    print("DEBUG preview====>")
+    print(repr(preview))  # 這時你會看到多行資料，沒有字面 \n
+    print("<====DEBUG preview")
     return summary + "```\n" + preview + "\n```"
+
+
+
+
 
 def estimate_tokens_per_row(df):
     csv_text = df.to_csv(index=False)
